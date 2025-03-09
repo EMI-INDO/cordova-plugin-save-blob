@@ -1,0 +1,62 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="cordova-plugin-save-blob" version="0.0.1"
+    xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools">
+
+    <name>Cordova Plugin lugin SaveBlob</name>
+    <description>WebRTC Convert Blob to base64Data save/downlaod</description>
+    <author>EMI INDO</author>
+    <license>ISC</license>
+
+     <!-- WebRTC: https://webrtc.github.io/samples/ -->
+
+    <js-module name="CordovaSaveBlob" src="www/CordovaSaveBlob.js">
+        <clobbers target="cordova.plugin.CordovaSaveBlob" />
+    </js-module>
+     
+    <platform name="android">
+        <config-file parent="/*" target="res/xml/config.xml">
+            <feature name="CordovaSaveBlob">
+                <param name="android-package" value="emi.indo.cordova.plugin.save.blob.CordovaSaveBlob" />
+            </feature>
+        </config-file>
+
+
+        <edit-config file="AndroidManifest.xml" target="/manifest" mode="merge">
+         <manifest xmlns:tools="http://schemas.android.com/tools" />
+        </edit-config>
+
+        <preference name="LEGACY_EXTERNAL_STORAGE" default="true" />
+        <preference name="DOCUMENT_FILE_VERSION" default="1.0.1" />
+
+        <config-file target="AndroidManifest.xml" parent="/*">
+
+            <uses-permission android:name="android.permission.INTERNET" />
+            <!-- permission android min 12 | 13 | 14 | 15 + -->
+            <uses-permission android:name="android.permission.CAMERA" />
+            <uses-permission android:name="android.permission.RECORD_AUDIO" />
+            <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:remove="android:maxSdkVersion" tools:ignore="ScopedStorage" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:remove="android:maxSdkVersion" />
+            <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+            <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+            <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+            <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+        </config-file>
+
+        <!-- permission android max 11 -->
+        <edit-config file="AndroidManifest.xml" mode="merge" target="/manifest/application">
+            <application android:requestLegacyExternalStorage="$LEGACY_EXTERNAL_STORAGE" />
+        </edit-config>
+
+        <!-- user > selectFiles | selectTargetPath -->
+        <framework src="androidx.documentfile:documentfile:$DOCUMENT_FILE_VERSION" />
+
+        <source-file src="src/android/CordovaSaveBlob.java" target-dir="src/emi/indo/cordova/plugin/save/blob" />
+
+    </platform>
+</plugin>

@@ -1,0 +1,17 @@
+{
+  "name": "cordova-plugin-save-blob",
+  "version": "0.0.1",
+  "description": "WebRTC Convert Blob to base64Data save/downlaod",
+  "cordova": {
+    "id": "cordova-plugin-save-blob",
+    "platforms": [
+      "android"
+    ]
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-android"
+  ],
+  "author": "EMI INDO",
+  "license": "ISC"
+}
