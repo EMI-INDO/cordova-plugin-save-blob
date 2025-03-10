@@ -18,4 +18,4 @@ cordova plugin add cordova-plugin-save-blob
 - variable DOCUMENT_FILE_VERSION = "1.0.1"
 
 
-[Simple API example:]()
+[Simple API example:](https://www.construct.net/en/forum/construct-3/scripting-51/register-webrtc-cordova-185588)
