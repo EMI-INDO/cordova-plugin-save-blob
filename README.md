@@ -1,13 +1,13 @@
 
 
-# cordova-plugin-save-blob
-
 ## Register WebRTC
+
+# cordova-plugin-save-blob
 
  WebRTC Convert Blob to base64Data save/downlaod
 
- WebRTC: https://webrtc.github.io/samples/
- WebRTC: example https://github.com/webrtc/samples/tree/gh-pages/src/content
+ - WebRTC: https://webrtc.github.io/samples/
+ - WebRTC: example https://github.com/webrtc/samples/tree/gh-pages/src/content
 
  ## Installation
 
@@ -18,4 +18,4 @@ cordova plugin add cordova-plugin-save-blob
 - variable DOCUMENT_FILE_VERSION = "1.0.1"
 
 
-[simple example:]()
+[Simple API example:]()
