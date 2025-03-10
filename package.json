@@ -10,8 +10,14 @@
   },
   "keywords": [
     "ecosystem:cordova",
-    "cordova-android"
+    "cordova-android",
+    "cordova-file-save",
+    "cordova-file",
+    "cordova-file-blob",
+    "cordova-file-downlaod",
+    "cordova-plugin-save-blob"
   ],
   "author": "EMI INDO",
+  "email": "cordova.c3addon@gmail.com",
   "license": "ISC"
 }

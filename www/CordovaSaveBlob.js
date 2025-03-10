@@ -1,5 +1,9 @@
 var exec = require('cordova/exec');
 
+exports.registerWebRTC = function (success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'registerWebRTC', []);
+};
+
 exports.checkAndRequestPermissions = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'checkAndRequestPermissions', [options]);
 };
@@ -20,6 +24,3 @@ exports.downloadFile = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'downloadFile', [options]);
 };
 
-exports.registerWebRTC = function (success, error) {
-    exec(success, error, 'CordovaSaveBlob', 'registerWebRTC', []);
-};
