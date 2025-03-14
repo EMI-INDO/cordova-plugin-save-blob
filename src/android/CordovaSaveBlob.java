@@ -68,8 +68,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
         super.initialize(cordova, webView);
         mCordovaWebView = webView;
-
-
     }
 
     @Override
@@ -106,9 +104,11 @@ public class CordovaSaveBlob extends CordovaPlugin {
             
         } else if ("downloadBlob".equals(action)) {
             JSONObject options = args.getJSONObject(0);
+            String saveToPath = options.optString("saveToPath"); // update v0.0.2
             String base64Data = options.optString("base64Data");
             String filename = options.optString("fileName");
-            downloadBlob(base64Data, filename, callbackContext);
+            this.selectedTargetPath = saveToPath;
+            this.downloadBlob(base64Data, filename, callbackContext);
             return true;
             
         } else if (action.equals("downloadFile")) {
@@ -149,7 +149,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
             public void run() {
                 try {
                     String base64Preview = base64Data.substring(0, Math.min(50, base64Data.length()));
-                    Log.d(TAG, "Base64 data preview: " + base64Preview);
+                  //  Log.d(TAG, "Base64 data preview: " + base64Preview);
 
                     byte[] fileData = Base64.decode(base64Data, Base64.DEFAULT);
 
