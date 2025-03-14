@@ -14,6 +14,7 @@
 ```sh
 cordova plugin add cordova-plugin-save-blob
 ```
+## Optional
 - variable LEGACY_EXTERNAL_STORAGE = boolean
 - variable DOCUMENT_FILE_VERSION = "1.0.1"
 
