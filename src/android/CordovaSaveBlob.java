@@ -102,6 +102,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
             this.openDocumentTree();
             return true;
             
+        } else if ("conversionUri".equals(action)) {
+            JSONObject options = args.getJSONObject(0);
+            String uriPath = options.optString("uriPath");
+            this.conversionUri(uriPath, callbackContext);
+            return true;
+
         } else if ("downloadBlob".equals(action)) {
             JSONObject options = args.getJSONObject(0);
             String saveToPath = options.optString("saveToPath"); // update v0.0.2
@@ -120,6 +126,59 @@ public class CordovaSaveBlob extends CordovaPlugin {
         } 
        
         return false;
+    }
+
+
+
+    private void conversionUri(String uriPath, CallbackContext callbackContext) {
+        cordova.getThreadPool().execute(() -> {
+            try {
+                String finalPath = uriPath;
+                if (finalPath.startsWith("content://")) {
+                    finalPath = convertContentUriToFilePath(finalPath);
+                }
+                callbackContext.success(finalPath);
+            } catch (Exception e) {
+                callbackContext.error("conversionUri Error : " + e.getMessage());
+            }
+        });
+    }
+
+
+
+
+
+    private String convertContentUriToFilePath(String uriString) {
+      //  Log.d(TAG, "Converting URI: " + uriString);
+        try {
+            Uri uri = Uri.parse(uriString);
+            if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
+                String docId = DocumentsContract.getTreeDocumentId(uri);
+               // Log.d(TAG, "Document ID: " + docId);
+                String[] split = docId.split(":");
+                if (split.length >= 2) {
+                    String type = split[0];
+                    String pathPart = split[1];
+                    String convertedPath;
+                    if ("primary".equalsIgnoreCase(type)) {
+                        convertedPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + pathPart;
+                    } else {
+                        // For SD Card or non-primary storage
+                        convertedPath = "/storage/" + type + "/" + pathPart;
+                    }
+                    Log.d(TAG, "Converted to path: " + convertedPath);
+                    return convertedPath;
+                } else {
+                    Log.d(TAG, "Document ID does not have two parts.");
+                }
+            } else {
+                Log.d(TAG, "Authority not recognized for conversion: " + uri.getAuthority());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Exception in convertContentUriToFilePath: " + e.getMessage());
+        }
+        Log.d(TAG, "Returning original URI string as fallback: " + uriString);
+        return uriString;
     }
 
 
