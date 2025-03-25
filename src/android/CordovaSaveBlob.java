@@ -35,6 +35,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -42,6 +43,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -72,7 +74,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
-       currentCallbackContext = callbackContext;
+        currentCallbackContext = callbackContext;
         if (action.equals("checkAndRequestPermissions")) {
             JSONObject options = args.getJSONObject(0);
             try {
@@ -87,25 +89,25 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 this.currentCallbackContext.error("Error: " + e.getMessage());
             }
             return true;
-            
+
         } else if (action.equals("selectFiles")) {
             JSONObject options = args.getJSONObject(0);
             String mimeType = options.optString("mime");
             this.selectFile(mimeType);
             return true;
-            
+
         } else if (action.equals("registerWebRTC")) {
             this.registerWebRTC();
             return true;
-            
+
         } else if ("selectTargetPath".equals(action)) {
             this.openDocumentTree();
             return true;
-            
-        } else if ("conversionUri".equals(action)) {
+
+        } else if ("conversionSAFUri".equals(action)) { // update v0.0.3
             JSONObject options = args.getJSONObject(0);
             String uriPath = options.optString("uriPath");
-            this.conversionUri(uriPath, callbackContext);
+            this.conversionSAFUri(uriPath, callbackContext);
             return true;
 
         } else if ("downloadBlob".equals(action)) {
@@ -116,21 +118,21 @@ public class CordovaSaveBlob extends CordovaPlugin {
             this.selectedTargetPath = saveToPath;
             this.downloadBlob(base64Data, filename, callbackContext);
             return true;
-            
+
         } else if (action.equals("downloadFile")) {
             JSONObject options = args.getJSONObject(0);
             String fileUrl = options.optString("fileUrl");
             String fileName = options.optString("fileName");
             this.downloadFile(fileUrl, fileName, callbackContext);
             return true;
-        } 
-       
+        }
+
         return false;
     }
 
 
 
-    private void conversionUri(String uriPath, CallbackContext callbackContext) {
+    private void conversionSAFUri(String uriPath, CallbackContext callbackContext) {
         cordova.getThreadPool().execute(() -> {
             try {
                 String finalPath = uriPath;
@@ -146,15 +148,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-
-
     private String convertContentUriToFilePath(String uriString) {
-      //  Log.d(TAG, "Converting URI: " + uriString);
+        //  Log.d(TAG, "Converting SAF URI: " + uriString);
         try {
             Uri uri = Uri.parse(uriString);
             if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
                 String docId = DocumentsContract.getTreeDocumentId(uri);
-               // Log.d(TAG, "Document ID: " + docId);
+                // Log.d(TAG, "Document ID: " + docId);
                 String[] split = docId.split(":");
                 if (split.length >= 2) {
                     String type = split[0];
@@ -203,12 +203,40 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
 
+    private String createBase64(DocumentFile documentFile) throws IOException {
+        InputStream inputStream = cordova.getContext().getContentResolver().openInputStream(documentFile.getUri());
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            byteArrayOutputStream.write(buffer, 0, bytesRead);
+        }
+        inputStream.close();
+        return Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT);
+    }
+
+
+    private String createBase64(Uri fileUri) throws IOException {
+        InputStream inputStream = cordova.getContext().getContentResolver().openInputStream(fileUri);
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            byteArrayOutputStream.write(buffer, 0, bytesRead);
+        }
+        inputStream.close();
+        return Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT);
+    }
+
+
+
     private void downloadBlob(final String base64Data, final String filename, final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 try {
+
                     String base64Preview = base64Data.substring(0, Math.min(50, base64Data.length()));
-                  //  Log.d(TAG, "Base64 data preview: " + base64Preview);
+                    // Log.d(TAG, "Base64 data preview: " + base64Preview);
 
                     byte[] fileData = Base64.decode(base64Data, Base64.DEFAULT);
 
@@ -222,8 +250,18 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                 if (out != null) {
                                     out.write(fileData);
                                     out.close();
-                                    callbackContext.success(newFile.getUri().toString()); // "File downloaded to: " + newFile.getUri().toString()
-                                    return;
+
+                                    try {
+                                        JSONObject metaData = new JSONObject();
+                                        metaData.put("name", newFile.getName());
+                                        metaData.put("base64", createBase64(newFile));
+                                        metaData.put("saveToPath", newFile.getUri().toString()); // uriSAF
+                                        metaData.put("size", newFile.length());
+                                        callbackContext.success(metaData.toString());
+                                    } catch (IOException | JSONException e) {
+                                       // Log.e(TAG, "Error getting metadata: " + e.getMessage());
+                                        callbackContext.error("Error getting metadata: " + e.getMessage());
+                                    }
                                 } else {
                                     callbackContext.error("Failed to open output stream for the new file.");
                                 }
@@ -234,7 +272,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                             callbackContext.error("Picked directory is null or not writable.");
                         }
                     } else {
-                        // Use default Downloads folder via MediaStore.
+                        // Using the default Downloads folder via MediaStore.
                         ContentResolver contentResolver = cordova.getActivity().getContentResolver();
                         ContentValues contentValues = getDefaultDownloadContentValues(filename);
                         Uri fileUri = null;
@@ -246,8 +284,18 @@ public class CordovaSaveBlob extends CordovaPlugin {
                             if (out != null) {
                                 out.write(fileData);
                                 out.close();
-                                callbackContext.success(fileUri.toString()); // "File downloaded to: " + fileUri.toString()
-                                return;
+
+                                try {
+                                    JSONObject metaData = new JSONObject();
+                                    metaData.put("name", filename);
+                                    metaData.put("base64", createBase64(fileUri));
+                                    metaData.put("saveToPath", fileUri.toString()); // uriSAF
+                                    metaData.put("size", fileData.length);
+                                    callbackContext.success(metaData.toString());
+                                } catch (IOException | JSONException e) {
+                                   // Log.e(TAG, "Error getting metadata: " + e.getMessage());
+                                    callbackContext.error("Error getting metadata: " + e.getMessage());
+                                }
                             } else {
                                 callbackContext.error("Failed to open output stream for default Downloads folder.");
                             }
@@ -273,8 +321,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
 
-
-
     private void downloadFile(String fileUrl, String fileName, CallbackContext callbackContext) {
         cordova.getThreadPool().execute(() -> {
             try {
@@ -283,7 +329,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
                 urlConnection.setRequestMethod("GET");
                 urlConnection.connect();
-                
+
                 if (urlConnection.getResponseCode() != HttpURLConnection.HTTP_OK) {
                     callbackContext.error("Failed to download file: " + urlConnection.getResponseMessage());
                     return;
@@ -296,7 +342,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 ContentResolver contentResolver = cordova.getActivity().getContentResolver();
                 ContentValues contentValues = new ContentValues();
                 contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream");
-                
+
                 contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
 
                 String baseName = fileName.substring(0, fileName.lastIndexOf('.'));
@@ -305,7 +351,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 String uniqueFileName = baseName + "_" + randomString + extension;
 
                 contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, uniqueFileName);
-                
+
                 Uri uri = contentResolver.insert(MediaStore.Files.getContentUri("external"), contentValues);
                 if (uri == null) {
                     callbackContext.error("Failed to create file in Downloads.");
@@ -353,14 +399,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
         return randomString.toString();
     }
 
-   
+
 
     private void openDocumentTree() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
     }
-
-
 
 
 
@@ -376,22 +420,60 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
 
-
-
-    private void handleSelectFile(Intent data) {
-        Uri uri = data.getData();
-        if (uri != null && this.currentCallbackContext != null) {
-            try {
-                String filePath = getFilePathFromUri(uri);
-                this.selectedTargetPath = filePath;
-                assert filePath != null;
-                this.currentCallbackContext.success(filePath);
-            } catch (Exception e) {
-                this.currentCallbackContext.error("Failed to get file path: " + e.getMessage());
+   private void handleSelectFile(Intent data) {
+    Uri uri = data.getData();
+    if (uri != null && this.currentCallbackContext != null) {
+        try {
+            String filePath = getFilePathFromUri(uri);
+            this.selectedTargetPath = filePath;
+            if (filePath != null && !filePath.isEmpty()) {
+                JSONObject metaData = getMetadata(filePath);
+                if (metaData != null) {
+                    this.currentCallbackContext.success(metaData);
+                } else {
+                    this.currentCallbackContext.error("Failed to get metadata.");
+                }
+            } else {
+                this.currentCallbackContext.error("File path is null or empty.");
             }
-        } else if (this.currentCallbackContext != null) {
-            this.currentCallbackContext.error("Uri is null.");
+        } catch (Exception e) {
+            this.currentCallbackContext.error("Failed to get file path: " + e.getMessage());
         }
+    } else if (this.currentCallbackContext != null) {
+        this.currentCallbackContext.error("Uri is null.");
+    }
+}
+
+
+
+
+private JSONObject getMetadata(String filePath) {
+        JSONObject metaData = new JSONObject();
+        File file = new File(filePath);
+
+        if (!file.exists()) {
+            return null;
+        }
+        try {
+
+            metaData.put("name", file.getName());
+            metaData.put("base64", createBase64(file));
+            metaData.put("uriSAF", filePath);
+            metaData.put("size", file.length());
+        } catch (JSONException | IOException e) {
+
+            return null;
+        }
+        return metaData;
+    }
+
+
+    private String createBase64(File file) throws IOException {
+        byte[] fileContent = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            fileContent = Files.readAllBytes(file.toPath());
+        }
+        return android.util.Base64.encodeToString(fileContent, android.util.Base64.NO_WRAP);
     }
 
 
@@ -401,7 +483,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
         if (treeUri != null && this.currentCallbackContext != null) {
             try {
                 if (!DocumentsContract.isTreeUri(treeUri)) {
-                  //  Log.e(TAG, "The selected URI is not a tree URI: " + treeUri);
+                    //  Log.e(TAG, "The selected URI is not a tree URI: " + treeUri);
                     this.currentCallbackContext.error("Invalid directory URI.");
                     return;
                 }
@@ -454,82 +536,79 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-
-
-
     private void checkAndRequestPermissions(CallbackContext callbackContext, JSONArray permissionsArr) {
         cordova.getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
 
-        Activity activity = cordova.getActivity();
-        List<String> permissionsToRequest = new ArrayList<>();
+                Activity activity = cordova.getActivity();
+                List<String> permissionsToRequest = new ArrayList<>();
 
-        for (int i = 0; i < permissionsArr.length(); i++) {
-            String permissionKey = permissionsArr.optString(i);
-            String mappedPermission = mapPermission(permissionKey);
-            if (mappedPermission != null && ContextCompat.checkSelfPermission(activity, mappedPermission) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(mappedPermission);
+                for (int i = 0; i < permissionsArr.length(); i++) {
+                    String permissionKey = permissionsArr.optString(i);
+                    String mappedPermission = mapPermission(permissionKey);
+                    if (mappedPermission != null && ContextCompat.checkSelfPermission(activity, mappedPermission) != PackageManager.PERMISSION_GRANTED) {
+                        permissionsToRequest.add(mappedPermission);
+                    }
+                }
+
+                if (!permissionsToRequest.isEmpty()) {
+                    String[] permsArray = permissionsToRequest.toArray(new String[0]);
+                    ActivityCompat.requestPermissions(activity, permsArray, 1);
+                    callbackContext.error("Permission has not been granted. Inquiry: " + Arrays.toString(permsArray));
+                } else {
+                    callbackContext.success("All requested permits have been granted.");
+                }
             }
-        }
 
-        if (!permissionsToRequest.isEmpty()) {
-            String[] permsArray = permissionsToRequest.toArray(new String[0]);
-            ActivityCompat.requestPermissions(activity, permsArray, 1);
-            callbackContext.error("Permission has not been granted. Inquiry: " + Arrays.toString(permsArray));
-        } else {
-            callbackContext.success("All requested permits have been granted.");
-        }
+            /**
+             * A function to map permission names from JS to string values in Manifest.
+             */
+            private String mapPermission(String permissionKey) {
+                switch (permissionKey) {
+                    case "CAMERA":
+                        return Manifest.permission.CAMERA;
+                    case "RECORD_AUDIO":
+                        return Manifest.permission.RECORD_AUDIO;
+                    case "MODIFY_AUDIO_SETTINGS":
+                        return Manifest.permission.MODIFY_AUDIO_SETTINGS;
+                    case "READ_EXTERNAL_STORAGE":
+                        return Manifest.permission.READ_EXTERNAL_STORAGE;
+                    case "WRITE_EXTERNAL_STORAGE":
+                        return Manifest.permission.WRITE_EXTERNAL_STORAGE;
+                    case "MANAGE_EXTERNAL_STORAGE":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            return Manifest.permission.MANAGE_EXTERNAL_STORAGE;
+                        } else {
+                            return null;
+                        }
+                        // If it supports Android 14+ with new permissions:
+                    case "READ_MEDIA_AUDIO":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            return Manifest.permission.READ_MEDIA_AUDIO;
+                        } else {
+                            return null;
+                        }
+                    case "READ_MEDIA_VIDEO":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            return Manifest.permission.READ_MEDIA_VIDEO;
+                        } else {
+                            return null;
+                        }
+                    case "READ_MEDIA_IMAGES":
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            return Manifest.permission.READ_MEDIA_IMAGES;
+                        } else {
+                            return null;
+                        }
+                    default:
+                        return null;
+                }
+
+            }
+        });
+
     }
-
-    /**
-     * A function to map permission names from JS to string values in Manifest.
-     */
-    private String mapPermission(String permissionKey) {
-        switch (permissionKey) {
-            case "CAMERA":
-                return Manifest.permission.CAMERA;
-            case "RECORD_AUDIO":
-                return Manifest.permission.RECORD_AUDIO;
-            case "MODIFY_AUDIO_SETTINGS":
-                return Manifest.permission.MODIFY_AUDIO_SETTINGS;
-            case "READ_EXTERNAL_STORAGE":
-                return Manifest.permission.READ_EXTERNAL_STORAGE;
-            case "WRITE_EXTERNAL_STORAGE":
-                return Manifest.permission.WRITE_EXTERNAL_STORAGE;
-            case "MANAGE_EXTERNAL_STORAGE":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    return Manifest.permission.MANAGE_EXTERNAL_STORAGE;
-                } else {
-                    return null;
-                }
-                // If it supports Android 14+ with new permissions:
-            case "READ_MEDIA_AUDIO":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    return Manifest.permission.READ_MEDIA_AUDIO;
-                } else {
-                    return null;
-                }
-            case "READ_MEDIA_VIDEO":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    return Manifest.permission.READ_MEDIA_VIDEO;
-                } else {
-                    return null;
-                }
-            case "READ_MEDIA_IMAGES":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    return Manifest.permission.READ_MEDIA_IMAGES;
-                } else {
-                    return null;
-                }
-            default:
-                return null;
-        }
-
-      }
-    });
-
- }
 
 
     @Override

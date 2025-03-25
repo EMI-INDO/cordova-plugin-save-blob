@@ -16,8 +16,8 @@ exports.selectTargetPath = function (success, error) {
     exec(success, error, 'CordovaSaveBlob', 'selectTargetPath', []);
 };
 
-exports.conversionUri = function (options, success, error) {
-    exec(success, error, 'CordovaSaveBlob', 'conversionUri', [options]);
+exports.conversionSAFUri = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'conversionSAFUri', [options]);
 };
 
 exports.downloadBlob = function (options, success, error) {
@@ -27,4 +27,3 @@ exports.downloadBlob = function (options, success, error) {
 exports.downloadFile = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'downloadFile', [options]);
 };
-
