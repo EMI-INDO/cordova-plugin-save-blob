@@ -14,15 +14,14 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
+import androidx.annotation.RequiresApi;
 import androidx.documentfile.provider.DocumentFile;
 
 import org.apache.cordova.CordovaInterface;
@@ -45,8 +44,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Random;
 
 /**
@@ -62,6 +59,15 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1;
     private static final int FILE_SELECT_CODE = 2;
 
+    private static final int REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION = 100;
+    private static final int REQUEST_CODE_REVOKE_ALL_FILES_PERMISSION = 101;
+
+
+    private JSONObject currentPermissionsStatus = new JSONObject();
+
+
+    private Boolean isAppAllFilesAccess;
+
     private CallbackContext currentCallbackContext;
 
     protected CordovaWebView mCordovaWebView;
@@ -70,21 +76,33 @@ public class CordovaSaveBlob extends CordovaPlugin {
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
         super.initialize(cordova, webView);
         mCordovaWebView = webView;
+
+
+
     }
+
+
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         currentCallbackContext = callbackContext;
-        if (action.equals("checkAndRequestPermissions")) {
+        if ("checkAndRequestPermissions".equals(action)) {
             JSONObject options = args.getJSONObject(0);
+            this.isAppAllFilesAccess = options.optBoolean("isAllFilesAccess", false);
+
+            JSONArray permissionsArr = options.optJSONArray("permissions");
+            if (permissionsArr == null) {
+                String perm = options.optString("permissions");
+                permissionsArr = new JSONArray();
+                permissionsArr.put(perm);
+            }
+            checkAndRequestPermissions(callbackContext, permissionsArr);
+            return true;
+
+        } else if (action.equals("openRevokeAllFilesAccessSettings")) {
+
             try {
-                JSONArray permissionsArr = options.optJSONArray("permissions");
-                if (permissionsArr == null) {
-                    String perm = options.optString("permissions");
-                    permissionsArr = new JSONArray();
-                    permissionsArr.put(perm);
-                }
-                this.checkAndRequestPermissions(callbackContext, permissionsArr);
+                this.openRevokeAllFilesAccessSettings();
             } catch (Exception e) {
                 this.currentCallbackContext.error("Error: " + e.getMessage());
             }
@@ -128,6 +146,23 @@ public class CordovaSaveBlob extends CordovaPlugin {
         }
 
         return false;
+    }
+
+
+
+    public void openRevokeAllFilesAccessSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + cordova.getActivity().getPackageName()));
+                cordova.startActivityForResult(this, intent, REQUEST_CODE_REVOKE_ALL_FILES_PERMISSION);
+            } catch (Exception e) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                cordova.startActivityForResult(this, intent, REQUEST_CODE_REVOKE_ALL_FILES_PERMISSION);
+            }
+        } else {
+            // For Android versions below R, this feature is not applicable
+        }
     }
 
 
@@ -536,114 +571,167 @@ private JSONObject getMetadata(String filePath) {
 
 
 
-    private void checkAndRequestPermissions(CallbackContext callbackContext, JSONArray permissionsArr) {
-        cordova.getActivity().runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
 
-                Activity activity = cordova.getActivity();
-                List<String> permissionsToRequest = new ArrayList<>();
-
-                for (int i = 0; i < permissionsArr.length(); i++) {
-                    String permissionKey = permissionsArr.optString(i);
-                    String mappedPermission = mapPermission(permissionKey);
-                    if (mappedPermission != null && ContextCompat.checkSelfPermission(activity, mappedPermission) != PackageManager.PERMISSION_GRANTED) {
-                        permissionsToRequest.add(mappedPermission);
-                    }
+    private String mapPermission(String permissionKey) {
+        switch (permissionKey) {
+            case "CAMERA":
+                return Manifest.permission.CAMERA;
+            case "RECORD_AUDIO":
+                return Manifest.permission.RECORD_AUDIO;
+            case "MODIFY_AUDIO_SETTINGS":
+                return Manifest.permission.MODIFY_AUDIO_SETTINGS;
+            case "READ_EXTERNAL_STORAGE":
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    return null;
                 }
-
-                if (!permissionsToRequest.isEmpty()) {
-                    String[] permsArray = permissionsToRequest.toArray(new String[0]);
-                    ActivityCompat.requestPermissions(activity, permsArray, 1);
-                    callbackContext.error("Permission has not been granted. Inquiry: " + Arrays.toString(permsArray));
+                return Manifest.permission.READ_EXTERNAL_STORAGE;
+            case "WRITE_EXTERNAL_STORAGE":
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    return null;
+                }
+                return Manifest.permission.WRITE_EXTERNAL_STORAGE;
+            case "MANAGE_EXTERNAL_STORAGE":
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    return Manifest.permission.MANAGE_EXTERNAL_STORAGE;
                 } else {
-                    callbackContext.success("All requested permits have been granted.");
+                    return null;
                 }
-            }
-
-            /**
-             * A function to map permission names from JS to string values in Manifest.
-             */
-            private String mapPermission(String permissionKey) {
-                switch (permissionKey) {
-                    case "CAMERA":
-                        return Manifest.permission.CAMERA;
-                    case "RECORD_AUDIO":
-                        return Manifest.permission.RECORD_AUDIO;
-                    case "MODIFY_AUDIO_SETTINGS":
-                        return Manifest.permission.MODIFY_AUDIO_SETTINGS;
-                    case "READ_EXTERNAL_STORAGE":
-                        return Manifest.permission.READ_EXTERNAL_STORAGE;
-                    case "WRITE_EXTERNAL_STORAGE":
-                        return Manifest.permission.WRITE_EXTERNAL_STORAGE;
-                    case "MANAGE_EXTERNAL_STORAGE":
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            return Manifest.permission.MANAGE_EXTERNAL_STORAGE;
-                        } else {
-                            return null;
-                        }
-                        // If it supports Android 14+ with new permissions:
-                    case "READ_MEDIA_AUDIO":
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            return Manifest.permission.READ_MEDIA_AUDIO;
-                        } else {
-                            return null;
-                        }
-                    case "READ_MEDIA_VIDEO":
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            return Manifest.permission.READ_MEDIA_VIDEO;
-                        } else {
-                            return null;
-                        }
-                    case "READ_MEDIA_IMAGES":
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            return Manifest.permission.READ_MEDIA_IMAGES;
-                        } else {
-                            return null;
-                        }
-                    default:
-                        return null;
+            case "READ_MEDIA_AUDIO":
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    return Manifest.permission.READ_MEDIA_AUDIO;
                 }
-
-            }
-        });
-
+                return null;
+            case "READ_MEDIA_VIDEO":
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    return Manifest.permission.READ_MEDIA_VIDEO;
+                }
+                return null;
+            case "READ_MEDIA_IMAGES":
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    return Manifest.permission.READ_MEDIA_IMAGES;
+                }
+                return null;
+            default:
+                return null;
+        }
     }
 
+    private void checkAndRequestPermissions(CallbackContext callbackContext, JSONArray permissionsArr) throws JSONException {
+        ArrayList<String> permissionsToRequest = new ArrayList<>();
+       // Log.d(TAG, "Checking permissions...");
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) throws JSONException {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 1) {
-            boolean allGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
+        for (int i = 0; i < permissionsArr.length(); i++) {
+            String permissionKey = permissionsArr.getString(i);
+            String androidPermission = mapPermission(permissionKey);
+           // Log.d(TAG, "Mapped permission for key " + permissionKey + ": " + androidPermission);
+
+            if (androidPermission != null) {
+                if (androidPermission.equals(Manifest.permission.MANAGE_EXTERNAL_STORAGE) && isAppAllFilesAccess) {
+                    // Penanganan khusus untuk MANAGE_EXTERNAL_STORAGE
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        if (Environment.isExternalStorageManager()) {
+                           // Log.d(TAG, "MANAGE_EXTERNAL_STORAGE already granted.");
+                            currentPermissionsStatus.put(androidPermission, true);
+                        } else {
+                          //  Log.d(TAG, "MANAGE_EXTERNAL_STORAGE not granted. Redirecting to settings...");
+
+                            currentPermissionsStatus.put(androidPermission, false);
+                            try {
+                                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                                intent.setData(Uri.parse("package:" + cordova.getActivity().getPackageName()));
+                                cordova.setActivityResultCallback(this);
+                                cordova.getActivity().startActivityForResult(intent, REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION);
+                               // Log.d(TAG, "Started settings activity for MANAGE_EXTERNAL_STORAGE.");
+
+                                return;
+                            } catch (Exception e) {
+                               // Log.e(TAG, "Error starting settings intent: " + e.getMessage());
+                                Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                                cordova.setActivityResultCallback(this);
+                                cordova.getActivity().startActivityForResult(intent, REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION);
+                              //  Log.d(TAG, "Started fallback settings activity for MANAGE_EXTERNAL_STORAGE.");
+                                return;
+                            }
+                        }
+                    } else {
+                       // Log.d(TAG, "Android version does not support MANAGE_EXTERNAL_STORAGE.");
+                        currentPermissionsStatus.put(androidPermission, false);
+                    }
+                } else {
+                    // Untuk izin selain MANAGE_EXTERNAL_STORAGE
+                    if (cordova.hasPermission(androidPermission)) {
+                      //  Log.d(TAG, "Permission already granted: " + androidPermission);
+                        currentPermissionsStatus.put(androidPermission, true);
+                    } else {
+                       // Log.d(TAG, "Permission not granted: " + androidPermission);
+                        permissionsToRequest.add(androidPermission);
+                    }
                 }
             }
-            if (allGranted) {
-                currentCallbackContext.success("Permission granted by the user.");
-            } else {
-                currentCallbackContext.error("Permission denied by user");
+        }
+
+        if (!permissionsToRequest.isEmpty()) {
+           // Log.d(TAG, "Requesting permissions: " + permissionsToRequest.toString());
+            cordova.requestPermissions(this, 1, permissionsToRequest.toArray(new String[0]));
+        } else {
+           // Log.d(TAG, "All requested permissions are already granted.");
+            currentCallbackContext.success(currentPermissionsStatus);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        Log.d(TAG, "onRequestPermissionsResult: requestCode=" + requestCode);
+        if (requestCode == 1) {
+            try {
+                for (int i = 0; i < permissions.length; i++) {
+                    boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
+                    currentPermissionsStatus.put(permissions[i], granted);
+                   // Log.d(TAG, "Permission " + permissions[i] + " granted: " + granted);
+                }
+                currentCallbackContext.success(currentPermissionsStatus);
+            } catch (JSONException e) {
+               // Log.e(TAG, "Error processing permissions result: " + e.getMessage());
+                currentCallbackContext.error("Error processing permissions result: " + e.getMessage());
             }
         }
     }
 
-
+    @RequiresApi(api = Build.VERSION_CODES.R)
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (resultCode == Activity.RESULT_OK && data != null) {
-            if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
+      //  Log.d(TAG, "onActivityResult called: requestCode=" + requestCode + ", resultCode=" + resultCode);
+
+        if (requestCode == REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION) {
+            try {
+                boolean granted = Environment.isExternalStorageManager();
+                currentPermissionsStatus.put(Manifest.permission.MANAGE_EXTERNAL_STORAGE, granted);
+               // Log.d(TAG, "MANAGE_EXTERNAL_STORAGE status returned: " + granted);
+                currentCallbackContext.success(currentPermissionsStatus);
+            } catch (JSONException e) {
+               // Log.e(TAG, "JSON error: " + e.getMessage());
+                currentCallbackContext.error("JSON error: " + e.getMessage());
+            }
+        } else if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+               // Log.d(TAG, "Directory selected: " + data.getData());
                 handleSelectTargetPath(data);
-            } else if (requestCode == FILE_SELECT_CODE) {
+            } else {
+               // Log.d(TAG, "Directory selection canceled.");
+                currentCallbackContext.error("Directory selection canceled.");
+            }
+        } else if (requestCode == FILE_SELECT_CODE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+               // Log.d(TAG, "File selected: " + data.getData());
                 handleSelectFile(data);
+            } else {
+              //  Log.d(TAG, "File selection canceled.");
+                currentCallbackContext.error("File selection canceled.");
             }
         } else {
+           // Log.d(TAG, "Unhandled activity result: requestCode=" + requestCode);
             if (this.currentCallbackContext != null) {
-                this.currentCallbackContext.error(requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE
-                        ? "Directory selection canceled."
-                        : "File selection canceled.");
+                currentCallbackContext.error("Unhandled activity result");
             }
         }
     }

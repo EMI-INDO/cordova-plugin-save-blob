@@ -8,6 +8,10 @@ exports.checkAndRequestPermissions = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'checkAndRequestPermissions', [options]);
 };
 
+exports.openRevokeAllFilesAccessSettings = function (success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'openRevokeAllFilesAccessSettings', []);
+};
+
 exports.selectFiles = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'selectFiles', [options]);
 };
