@@ -22,39 +22,9 @@
             </feature>
         </config-file>
 
+        <hook type="before_plugin_install" src="hooks/before_plugin_install.js" />
 
-        <edit-config file="AndroidManifest.xml" target="/manifest" mode="merge">
-         <manifest xmlns:tools="http://schemas.android.com/tools" />
-        </edit-config>
-
-        <preference name="LEGACY_EXTERNAL_STORAGE" default="true" />
         <preference name="DOCUMENT_FILE_VERSION" default="1.0.1" />
-
-        <config-file target="AndroidManifest.xml" parent="/manifest">
-
-            <!-- permission android min 12 | 13 | 14 | 15 + -->
-            <uses-permission android:name="android.permission.CAMERA" tools:ignore="ManifestOrder" />
-            <uses-permission android:name="android.permission.RECORD_AUDIO" />
-            <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-            <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ManifestOrder,ScopedStorage" tools:remove="android:maxSdkVersion" />
-            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:remove="android:maxSdkVersion" />
-            <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-            <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-            <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-            <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
-        </config-file>
-
-        <config-file target="AndroidManifest.xml" parent="/manifest" >
-         <uses-feature android:name="android.hardware.camera" android:required="false"/>
-        </config-file>
-
-        <!-- permission android min 6 max 11 -->
-        <edit-config file="AndroidManifest.xml" mode="merge" target="/manifest/application">
-            <application android:requestLegacyExternalStorage="$LEGACY_EXTERNAL_STORAGE" />
-        </edit-config>
 
         <!-- user > selectFiles | selectTargetPath -->
         <framework src="androidx.documentfile:documentfile:$DOCUMENT_FILE_VERSION" />
