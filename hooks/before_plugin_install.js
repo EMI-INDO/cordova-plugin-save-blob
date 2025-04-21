@@ -4,10 +4,16 @@ module.exports = function (context) {
     const fs = require('fs');
     const path = require('path');
 
-    console.log('Running before_plugin_install hook to modify AndroidManifest.xml...');
-
     const projectRoot = context.opts.projectRoot;
-    const manifestPath = path.join(projectRoot, 'platforms', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+    const manifestPath = path.join(
+        projectRoot,
+        'platforms',
+        'android',
+        'app',
+        'src',
+        'main',
+        'AndroidManifest.xml'
+    );
 
     if (!fs.existsSync(manifestPath)) {
         console.error('AndroidManifest.xml not found at:', manifestPath);
@@ -17,49 +23,56 @@ module.exports = function (context) {
     let manifest = fs.readFileSync(manifestPath, 'utf8');
     let modified = false;
 
-    // 1. Tambahkan atribut xmlns:tools pada tag <manifest> jika belum ada
-    if (!manifest.match(/xmlns:tools="http:\/\/schemas\.android\.com\/tools"/)) {
-        manifest = manifest.replace(/<manifest/, '<manifest xmlns:tools="http://schemas.android.com/tools"');
+    if (!/xmlns:tools="http:\/\/schemas\.android\.com\/tools"/.test(manifest)) {
+        manifest = manifest.replace(
+            /<manifest/,
+            '<manifest xmlns:tools="http://schemas.android.com/tools"'
+        );
         modified = true;
-        console.log('Added xmlns:tools attribute to <manifest>');
+       // console.log('Added xmlns:tools attribute to <manifest>');
     }
 
-    // 2. Siapkan blok permission yang ingin disisipkan
-    const permissionBlock = `
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ManifestOrder,ScopedStorage" tools:remove="android:maxSdkVersion"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:remove="android:maxSdkVersion"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
-    `;
+    const permissions = [
+        { name: 'android.permission.RECORD_AUDIO' },
+        { name: 'android.permission.MODIFY_AUDIO_SETTINGS' },
+        { name: 'android.permission.READ_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32"' },
+        { name: 'android.permission.WRITE_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32" tools:ignore="ScopedStorage"' },
+        { name: 'android.permission.READ_MEDIA_VIDEO' },
+        { name: 'android.permission.READ_MEDIA_IMAGES' },
+        { name: 'android.permission.READ_MEDIA_VISUAL_USER_SELECTED' },
+        { name: 'android.permission.READ_MEDIA_AUDIO' }
+    ];
 
-    // 3. Cek apakah blok permission sudah ada (berdasarkan salah satu permission)
-    if (!manifest.includes('android.permission.CAMERA')) {
+    // Build permission blocks that do not yet exist
+    const toAdd = permissions
+        .filter(perm => !manifest.includes(perm.name))
+        .map(perm => {
+            const attrs = perm.attrs ? ' ' + perm.attrs : '';
+            return `    <uses-permission android:name="${perm.name}"${attrs}/>`;
+        });
+
+    if (toAdd.length) {
         const applicationIndex = manifest.indexOf('<application');
         if (applicationIndex !== -1) {
-            // Sisipkan blok permission tepat di atas tag <application>
-            manifest = manifest.slice(0, applicationIndex) + permissionBlock + '\n' + manifest.slice(applicationIndex);
+            const block = '\n' + toAdd.join('\n') + '\n';
+            manifest = manifest.slice(0, applicationIndex) + block + manifest.slice(applicationIndex);
             modified = true;
-            console.log('Added permission block above <application> tag');
         } else {
             console.error('<application> tag not found in AndroidManifest.xml');
         }
+    } else {
+        console.log('No new permissions to add');
     }
 
-    // 4. Tambahkan atribut android:requestLegacyExternalStorage="true" pada <application> jika belum ada
-    const applicationTagRegex = /<application([^>]*)>/;
-    const appMatch = manifest.match(applicationTagRegex);
-    if (appMatch && !appMatch[0].includes('android:requestLegacyExternalStorage="true"')) {
-        const newAppTag = appMatch[0].replace('<application', '<application android:requestLegacyExternalStorage="true"');
-        manifest = manifest.replace(applicationTagRegex, newAppTag);
+    const appTagRegex = /<application([^>]*)>/;
+    const appMatch = manifest.match(appTagRegex);
+    if (appMatch && !/android:requestLegacyExternalStorage="true"/.test(appMatch[0])) {
+        const newAppTag = appMatch[0].replace(
+            '<application',
+            '<application android:requestLegacyExternalStorage="true"'
+        );
+        manifest = manifest.replace(appTagRegex, newAppTag);
         modified = true;
-        console.log('Added android:requestLegacyExternalStorage attribute to <application>');
     }
 
     if (modified) {

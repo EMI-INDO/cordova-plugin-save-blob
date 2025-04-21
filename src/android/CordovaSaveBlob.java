@@ -16,7 +16,6 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
-import android.provider.Settings;
 import android.util.Base64;
 import android.util.Base64OutputStream;
 import android.util.Log;
@@ -63,14 +62,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1;
     private static final int FILE_SELECT_CODE = 2;
 
-    private static final int REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION = 100;
-    private static final int REQUEST_CODE_REVOKE_ALL_FILES_PERMISSION = 101;
-
-
-
     private JSONObject currentPermissionsStatus = new JSONObject();
     private static final long BASE64_THRESHOLD = 35 * 1024 * 1024; // 35 MB
-    private Boolean isAppAllFilesAccess;
 
     private CallbackContext currentCallbackContext;
 
@@ -92,7 +85,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         currentCallbackContext = callbackContext;
         if ("checkAndRequestPermissions".equals(action)) {
             JSONObject options = args.getJSONObject(0);
-            this.isAppAllFilesAccess = options.optBoolean("isAllFilesAccess", false);
 
             JSONArray permissionsArr = options.optJSONArray("permissions");
             if (permissionsArr == null) {
@@ -101,15 +93,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 permissionsArr.put(perm);
             }
             checkAndRequestPermissions(callbackContext, permissionsArr);
-            return true;
-
-        } else if (action.equals("openRevokeAllFilesAccessSettings")) {
-
-            try {
-                this.openRevokeAllFilesAccessSettings();
-            } catch (Exception e) {
-                this.currentCallbackContext.error("Error: " + e.getMessage());
-            }
             return true;
 
         } else if (action.equals("selectFiles")) {
@@ -161,82 +144,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
 
-
-
-
-
-
-    public void openRevokeAllFilesAccessSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                intent.setData(Uri.parse("package:" + cordova.getActivity().getPackageName()));
-                cordova.startActivityForResult(this, intent, REQUEST_CODE_REVOKE_ALL_FILES_PERMISSION);
-            } catch (Exception e) {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-                cordova.startActivityForResult(this, intent, REQUEST_CODE_REVOKE_ALL_FILES_PERMISSION);
-            }
-        } else {
-            // For Android versions below R, this feature is not applicable
-        }
-    }
-
-
-/*
-    private void conversionSAFUri(String uriPath, CallbackContext callbackContext) {
-        cordova.getThreadPool().execute(() -> {
-            try {
-                String finalPath = uriPath;
-                if (finalPath.startsWith("content://")) {
-                    finalPath = convertContentUriToFilePath(finalPath);
-                }
-                callbackContext.success(finalPath);
-            } catch (Exception e) {
-                callbackContext.error("conversionUri Error : " + e.getMessage());
-            }
-        });
-    }
-*/
-
-/*
-    private String convertContentUriToFilePath(String uriString) {
-        //  Log.d(TAG, "Converting SAF URI: " + uriString);
-        try {
-            Uri uri = Uri.parse(uriString);
-            if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
-                String docId = DocumentsContract.getTreeDocumentId(uri);
-                // Log.d(TAG, "Document ID: " + docId);
-                String[] split = docId.split(":");
-                if (split.length >= 2) {
-                    String type = split[0];
-                    String pathPart = split[1];
-                    String convertedPath;
-                    if ("primary".equalsIgnoreCase(type)) {
-                        convertedPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + pathPart;
-                    } else {
-                        // For SD Card or non-primary storage
-                        convertedPath = "/storage/" + type + "/" + pathPart;
-                    }
-                    Log.d(TAG, "Converted to path: " + convertedPath);
-                    return convertedPath;
-                } else {
-                    Log.d(TAG, "Document ID does not have two parts.");
-                }
-            } else {
-                Log.d(TAG, "Authority not recognized for conversion: " + uri.getAuthority());
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Exception in convertContentUriToFilePath: " + e.getMessage());
-        }
-        Log.d(TAG, "Returning original URI string as fallback: " + uriString);
-        return uriString;
-    }
-*/
-
-
-
-
-
     @SuppressLint("SdCardPath")
     private void conversionSAFUri(String uriPath, CallbackContext callbackContext) {
         cordova.getThreadPool().execute(() -> {
@@ -246,7 +153,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 if (uriPath.startsWith("content://")) {
                     finalPath = convertContentUriToFilePath(uriPath);
                 } else if (uriPath.startsWith("/data/user/0/")) {
-                    // Salin ke folder publik
                     File sourceFile = new File(uriPath);
                     File destDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
                     File destFile = new File(destDir, sourceFile.getName());
@@ -278,20 +184,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-
-    private String getFilePathFromUris(Uri uri) {
-        if (uri == null) return null;
-        String scheme = uri.getScheme();
-        if (ContentResolver.SCHEME_FILE.equalsIgnoreCase(scheme)) {
-            // file://
-            return uri.getPath();
-        }
-        // content://
-        return convertContentUriToFilePath(uri.toString());
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // 4) Converter existing: SAF tree‑URI, document‑URI, media, downloads, dll.
     private String convertContentUriToFilePath(String uriString) {
         if (uriString == null) return null;
         Context ctx = cordova.getContext();
@@ -517,7 +409,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                     metaData.put("size", fileData.length);
                                     callbackContext.success(metaData.toString());
                                 } catch (IOException | JSONException e) {
-                                    // Log.e(TAG, "Error getting metadata: " + e.getMessage());
                                     callbackContext.error("Error getting metadata: " + e.getMessage());
                                 }
                             } else {
@@ -645,10 +536,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-
-
-
-
     private void handleSelectFile(Intent data) {
         Uri uri = data.getData();
         if (uri != null && this.currentCallbackContext != null) {
@@ -686,10 +573,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
         JSONObject metaData = new JSONObject();
         metaData.put("name", file.getName());
-        metaData.put("uriSAF", filePath); // pastikan ini dapat di tangani oleh convertContentUriToFilePath
+        metaData.put("uriSAF", filePath);
         metaData.put("size", file.length());
-
-
 
         if (isGatBase64) {
             if (file.length() <= BASE64_THRESHOLD) {
@@ -705,7 +590,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         return metaData;
     }
 
-    /** Untuk file kecil: hasil Base64 langsung sebagai String */
     private String createBase64String(File file) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (
@@ -721,7 +605,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         return baos.toString("UTF-8");
     }
 
-    /** Untuk file besar: tulis Base64 ke sebuah file di cache, kembalikan path-nya */
     private String createBase64File(File file) throws IOException {
         File cacheDir = cordova.getActivity().getCacheDir();
         File base64File = new File(cacheDir, file.getName() + ".b64");
@@ -738,76 +621,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         }
         return base64File.getAbsolutePath();
     }
-
-
-
-
-
-
-
-
-
-    // Konversi file ke string base64
-    private String createBase64(File file) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        // Menggunakan Base64OutputStream agar data langsung diencode ke base64
-        Base64OutputStream base64OutputStream = new Base64OutputStream(baos, android.util.Base64.NO_WRAP);
-        BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-
-        byte[] buffer = new byte[8192]; // buffer 8KB (ubah sesuai kebutuhan)
-        int bytesRead;
-        while ((bytesRead = bis.read(buffer)) != -1) {
-            base64OutputStream.write(buffer, 0, bytesRead);
-        }
-
-        bis.close();
-        base64OutputStream.close();
-
-        return baos.toString();
-    }
-
-
-/*
-    private String createBase64(File file) throws IOException {
-        byte[] fileContent = null;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            fileContent = Files.readAllBytes(file.toPath());
-        }
-        return android.util.Base64.encodeToString(fileContent, android.util.Base64.NO_WRAP);
-    }
-*/
-
-
-
-    /*
-
-    private void handleSelectTargetPath(Intent data) {
-        Uri treeUri = data.getData();
-        if (treeUri != null && this.currentCallbackContext != null) {
-            try {
-                if (!DocumentsContract.isTreeUri(treeUri)) {
-                    //  Log.e(TAG, "The selected URI is not a tree URI: " + treeUri);
-                    this.currentCallbackContext.error("Invalid directory URI.");
-                    return;
-                }
-
-                int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                cordova.getContext().getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
-
-                this.selectedTargetPath = treeUri.toString();
-                this.currentCallbackContext.success(treeUri.toString());
-            } catch (SecurityException e) {
-                this.currentCallbackContext.error("Failed to persist permissions: " + e.getMessage());
-            }
-        } else if (this.currentCallbackContext != null) {
-            this.currentCallbackContext.error("Failed to select a directory.");
-        }
-    }
-
-*/
-
-
-
 
 
 
@@ -909,8 +722,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     private String mapPermission(String permissionKey) {
         switch (permissionKey) {
-            case "CAMERA":
-                return Manifest.permission.CAMERA;
             case "RECORD_AUDIO":
                 return Manifest.permission.RECORD_AUDIO;
             case "MODIFY_AUDIO_SETTINGS":
@@ -925,12 +736,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     return null;
                 }
                 return Manifest.permission.WRITE_EXTERNAL_STORAGE;
-            case "MANAGE_EXTERNAL_STORAGE":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    return Manifest.permission.MANAGE_EXTERNAL_STORAGE;
-                } else {
-                    return null;
-                }
             case "READ_MEDIA_AUDIO":
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     return Manifest.permission.READ_MEDIA_AUDIO;
@@ -960,58 +765,11 @@ public class CordovaSaveBlob extends CordovaPlugin {
             String androidPermission = mapPermission(permissionKey);
             // Log.d(TAG, "Mapped permission for key " + permissionKey + ": " + androidPermission);
 
-            if (androidPermission != null) {
-                if (androidPermission.equals(Manifest.permission.MANAGE_EXTERNAL_STORAGE) && isAppAllFilesAccess) {
-                    // Penanganan khusus untuk MANAGE_EXTERNAL_STORAGE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        if (Environment.isExternalStorageManager()) {
-                            // Log.d(TAG, "MANAGE_EXTERNAL_STORAGE already granted.");
-                            currentPermissionsStatus.put(androidPermission, true);
-                        } else {
-                            //  Log.d(TAG, "MANAGE_EXTERNAL_STORAGE not granted. Redirecting to settings...");
 
-                            currentPermissionsStatus.put(androidPermission, false);
-                            try {
-                                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                                intent.setData(Uri.parse("package:" + cordova.getActivity().getPackageName()));
-                                cordova.setActivityResultCallback(this);
-                                cordova.getActivity().startActivityForResult(intent, REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION);
-                                // Log.d(TAG, "Started settings activity for MANAGE_EXTERNAL_STORAGE.");
-
-                                return;
-                            } catch (Exception e) {
-                                // Log.e(TAG, "Error starting settings intent: " + e.getMessage());
-                                Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-                                cordova.setActivityResultCallback(this);
-                                cordova.getActivity().startActivityForResult(intent, REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION);
-                                //  Log.d(TAG, "Started fallback settings activity for MANAGE_EXTERNAL_STORAGE.");
-                                return;
-                            }
-                        }
-                    } else {
-                        // Log.d(TAG, "Android version does not support MANAGE_EXTERNAL_STORAGE.");
-                        currentPermissionsStatus.put(androidPermission, false);
-                    }
-                } else {
-                    // Untuk izin selain MANAGE_EXTERNAL_STORAGE
-                    if (cordova.hasPermission(androidPermission)) {
-                        //  Log.d(TAG, "Permission already granted: " + androidPermission);
-                        currentPermissionsStatus.put(androidPermission, true);
-                    } else {
-                        // Log.d(TAG, "Permission not granted: " + androidPermission);
-                        permissionsToRequest.add(androidPermission);
-                    }
-                }
-            }
         }
 
-        if (!permissionsToRequest.isEmpty()) {
-            // Log.d(TAG, "Requesting permissions: " + permissionsToRequest.toString());
-            cordova.requestPermissions(this, 1, permissionsToRequest.toArray(new String[0]));
-        } else {
-            // Log.d(TAG, "All requested permissions are already granted.");
-            currentCallbackContext.success(currentPermissionsStatus);
-        }
+        // Log.d(TAG, "All requested permissions are already granted.");
+        currentCallbackContext.success(currentPermissionsStatus);
     }
 
     @Override
@@ -1037,17 +795,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         //  Log.d(TAG, "onActivityResult called: requestCode=" + requestCode + ", resultCode=" + resultCode);
 
-        if (requestCode == REQUEST_CODE_MANAGE_ALL_FILES_PERMISSION) {
-            try {
-                boolean granted = Environment.isExternalStorageManager();
-                currentPermissionsStatus.put(Manifest.permission.MANAGE_EXTERNAL_STORAGE, granted);
-                // Log.d(TAG, "MANAGE_EXTERNAL_STORAGE status returned: " + granted);
-                currentCallbackContext.success(currentPermissionsStatus);
-            } catch (JSONException e) {
-                // Log.e(TAG, "JSON error: " + e.getMessage());
-                currentCallbackContext.error("JSON error: " + e.getMessage());
-            }
-        } else if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
+       if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
             if (resultCode == Activity.RESULT_OK && data != null) {
                 handleSelectTargetPath(data);
             } else {
