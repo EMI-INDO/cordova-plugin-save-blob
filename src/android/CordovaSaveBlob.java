@@ -26,7 +26,6 @@ import android.webkit.WebView;
 import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 
-import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
 
@@ -74,15 +73,14 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private JSONObject currentPermissionsStatus;
 
     private static final long BASE64_THRESHOLD = 35 * 1024 * 1024; // 35 MB
-
-
+    
     protected CordovaWebView mCordovaWebView;
 
     private Boolean isGatBase64 = false;
 
     @Override
-    public void initialize(CordovaInterface cordova, CordovaWebView webView) {
-        super.initialize(cordova, webView);
+    public void pluginInitialize() {
+
         mCordovaWebView = webView;
 
     }
@@ -166,6 +164,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     cordova.getActivity().runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+
                             request.grant(request.getResources());
                         }
                     });
@@ -185,13 +184,9 @@ public class CordovaSaveBlob extends CordovaPlugin {
         cordova.getThreadPool().execute(() -> {
             try {
                 String finalPath;
-
-                // 1) Semuanya yang content://
                 if (uriPath.startsWith("content://")) {
                     String lower = uriPath.toLowerCase();
 
-                    // 1a) Kalau URI kelihatan berekstensi media/document,
-                    //     maka gunakan convertContentUriToFilePathName
                     if (lower.endsWith(".mp3")
                             || lower.endsWith(".wav")
                             || lower.endsWith(".m4a")
@@ -206,16 +201,16 @@ public class CordovaSaveBlob extends CordovaPlugin {
                             || lower.endsWith(".txt")) {
                         finalPath = convertContentUriToFilePathName(uriPath);
                     }
-                    // 1b) selain itu, cukup ambil path-nya saja
+
                     else {
                         finalPath = convertContentUriToFilePath(uriPath);
                     }
                 }
-                // 2) internal app data
+
                 else if (uriPath.startsWith("/data/user/0/")) {
                     finalPath = convertDataUriToFilePath(uriPath);
                 }
-                // 3) fallback
+
                 else {
                     finalPath = uriPath;
                 }
@@ -239,26 +234,24 @@ public class CordovaSaveBlob extends CordovaPlugin {
         Uri uri = Uri.parse(uriString);
         String scheme = uri.getScheme();
 
-        // 1) Jika ini Tree‐URI (ambil file di dalam folder tree)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
-                && DocumentsContract.isTreeUri(uri)) {
-            // docId misalnya "primary:MyFolder/MySubfolder/MyFile.mp3"
-            String docId = DocumentsContract.getDocumentId(uri);
-            String[] split = docId.split(":");
-            String vol = split[0];
-            String path = split.length > 1 ? split[1] : "";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
+                    && DocumentsContract.isTreeUri(uri)) {
+                String docId = DocumentsContract.getDocumentId(uri);
+                String[] split = docId.split(":");
+                String vol = split[0];
+                String path = split.length > 1 ? split[1] : "";
 
-            // bangun base path (primary atau SD card lain)
-            String basePath;
-            if ("primary".equalsIgnoreCase(vol)) {
-                basePath = Environment.getExternalStorageDirectory().getAbsolutePath();
-            } else {
-                basePath = "/storage/" + vol;
+                String basePath;
+                if ("primary".equalsIgnoreCase(vol)) {
+                    basePath = Environment.getExternalStorageDirectory().getAbsolutePath();
+                } else {
+                    basePath = "/storage/" + vol;
+                }
+                return basePath + (path.startsWith("/") ? path : "/" + path);
             }
-            return basePath + (path.startsWith("/") ? path : "/" + path);
         }
 
-        // 2) Jika ini Document‐URI biasa
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
                 && DocumentsContract.isDocumentUri(ctx, uri)) {
             String auth = uri.getAuthority();
@@ -276,13 +269,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
             }
             // b) Downloads
             else if ("com.android.providers.downloads.documents".equals(auth)) {
-                // kalau raw:, docId = "raw:/storage/..."
+                // is raw:, docId = "raw:/storage/..."
                 if (docId.startsWith("raw:")) {
                     return docId.substring(4);
                 }
-                // coba query nama asli
+
                 String displayName = queryDisplayName(ctx, uri);
-                // kemudian ambil full path existing (jika ada)
+
                 String existing = convertContentUriToFilePath(uriString);
                 return existing != null ? existing : copyToCacheAndGetPath(ctx, uri, displayName);
             }
@@ -294,25 +287,21 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 else if ("video".equals(type)) mediaUri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
                 else if ("audio".equals(type)) mediaUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
 
-                // coba dapatkan path via _data
                 String sel = "_id=?";
                 String[] selArgs = new String[]{ id };
                 String fullPath = getDataColumn(ctx, mediaUri, sel, selArgs);
                 if (fullPath != null) return fullPath;
 
-                // fallback: copy ke cache
                 String displayName = queryDisplayName(ctx, uri);
                 return copyToCacheAndGetPath(ctx, uri, displayName);
             }
         }
 
-        // 3) Fallback untuk CONTENT scheme lain
         if (ContentResolver.SCHEME_CONTENT.equalsIgnoreCase(scheme)) {
             String displayName = queryDisplayName(ctx, uri);
             return copyToCacheAndGetPath(ctx, uri, displayName);
         }
 
-        // 4) Kalau file:// atau tidak terdeteksi, kembalikan apa adanya
         if (ContentResolver.SCHEME_FILE.equalsIgnoreCase(scheme)) {
             return uri.getPath();
         }
@@ -321,11 +310,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-
-
-
-
-    /** Helper untuk query MediaStore.MediaColumns.DISPLAY_NAME */
     private String queryDisplayName(Context ctx, Uri uri) {
         Cursor cursor = null;
         final String[] proj = { MediaStore.MediaColumns.DISPLAY_NAME };
@@ -342,7 +326,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         return "tempfile";
     }
 
-    /** Helper: salin InputStream URI ke cache dan kembalikan full path-nya */
     private String copyToCacheAndGetPath(Context ctx, Uri uri, String fileName) {
         File dst = new File(ctx.getCacheDir(), fileName);
         try (InputStream in = ctx.getContentResolver().openInputStream(uri);
@@ -368,14 +351,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private String convertDataUriToFilePath(String sourcePath) throws IOException {
         File src = new File(sourcePath);
         if (!src.exists() || !src.canRead()) {
-            throw new IOException("Source tidak dapat dibaca: " + sourcePath);
+            throw new IOException("Source cannot be read: " + sourcePath);
         }
 
         Context ctx = cordova.getContext();
-        String fileName = src.getName();                 // ABC.mp3
+        String fileName = src.getName();
         String lower   = fileName.toLowerCase();
 
-        // Pilih folder publik berdasarkan ekstensi
         File publicDir;
         if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".m4a")) {
             publicDir = Environment.getExternalStoragePublicDirectory(
@@ -396,17 +378,16 @@ public class CordovaSaveBlob extends CordovaPlugin {
         }
 
         if (!publicDir.exists() && !publicDir.mkdirs()) {
-            throw new IOException("Gagal membuat folder publik: " + publicDir.getAbsolutePath());
+            throw new IOException("Failed to create a public folder: " + publicDir.getAbsolutePath());
         }
 
-        // Bangun File tujuan yang benar: harus ada nama filenya
         File dst = new File(publicDir, fileName);
         if (dst.exists()) dst.delete();
 
-        // Logging untuk debugging
-        Log.d("convertDataUri", "sourcePath=" + sourcePath);
-        Log.d("convertDataUri", "publicDir="   + publicDir.getAbsolutePath());
-        Log.d("convertDataUri", "dst full   =" + dst.getAbsolutePath());
+        // Logging debug
+       // Log.d("convertDataUri", "sourcePath=" + sourcePath);
+       // Log.d("convertDataUri", "publicDir="   + publicDir.getAbsolutePath());
+       // Log.d("convertDataUri", "dst full   =" + dst.getAbsolutePath());
 
         currentCallbackContext.success(dst.getAbsolutePath());
 
@@ -420,7 +401,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
             out.flush();
         }
 
-        // **Ini wajib** mengembalikan dst.getAbsolutePath()
         return dst.getAbsolutePath();
 
     }
@@ -444,17 +424,19 @@ public class CordovaSaveBlob extends CordovaPlugin {
             return uri.getPath();
         }
         if (ContentResolver.SCHEME_CONTENT.equalsIgnoreCase(scheme)) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
-                    && DocumentsContract.isTreeUri(uri)) {
-                String treeId = DocumentsContract.getTreeDocumentId(uri);
-                String[] split = treeId.split(":");
-                String vol = split[0], part = split.length>1? split[1] : "";
-                if ("primary".equalsIgnoreCase(vol)) {
-                    return Environment.getExternalStorageDirectory()
-                            .getAbsolutePath()
-                            + (part.isEmpty()? "" : "/"+part);
-                } else {
-                    return "/storage/"+vol + (part.isEmpty()? "" : "/"+part);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
+                        && DocumentsContract.isTreeUri(uri)) {
+                    String treeId = DocumentsContract.getTreeDocumentId(uri);
+                    String[] split = treeId.split(":");
+                    String vol = split[0], part = split.length>1? split[1] : "";
+                    if ("primary".equalsIgnoreCase(vol)) {
+                        return Environment.getExternalStorageDirectory()
+                                .getAbsolutePath()
+                                + (part.isEmpty()? "" : "/"+part);
+                    } else {
+                        return "/storage/"+vol + (part.isEmpty()? "" : "/"+part);
+                    }
                 }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
@@ -783,7 +765,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
             }
         }
 
-        Log.d(TAG, "Metadata: " + metaData.toString());
+       // Log.d(TAG, "Metadata: " + metaData.toString());
         return metaData;
     }
 
@@ -907,8 +889,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
             String perm = mapPermission(key);
             if (perm == null) continue;
 
-            boolean granted = ContextCompat.checkSelfPermission(
-                    cordova.getContext(), perm) == PackageManager.PERMISSION_GRANTED;
+            boolean granted = ContextCompat.checkSelfPermission( cordova.getContext(), perm) == PackageManager.PERMISSION_GRANTED;
 
             currentPermissionsStatus.put(perm, granted);
             if (!granted) {
@@ -981,9 +962,11 @@ public class CordovaSaveBlob extends CordovaPlugin {
             return;
         }
 
-        if (!DocumentsContract.isTreeUri(treeUri)) {
-            currentCallbackContext.error("Invalid directory URI.");
-            return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (!DocumentsContract.isTreeUri(treeUri)) {
+                currentCallbackContext.error("Invalid directory URI.");
+                return;
+            }
         }
 
         final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION |

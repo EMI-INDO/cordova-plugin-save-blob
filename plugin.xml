@@ -1,8 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-save-blob" version="0.0.2"
+<plugin id="cordova-plugin-save-blob" version="0.0.3-beta.1"
     xmlns="http://apache.org/cordova/ns/plugins/1.0"
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:android="http://schemas.android.com/apk/res/android">
 
     <name>Cordova Plugin lugin SaveBlob</name>
     <description>WebRTC Convert Blob to base64Data save/downlaod</description>
