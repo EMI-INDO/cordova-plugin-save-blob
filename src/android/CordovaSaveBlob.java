@@ -3,6 +3,7 @@ package emi.indo.cordova.plugin.save.blob;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
@@ -16,6 +17,7 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Base64;
 import android.util.Base64OutputStream;
 import android.util.Log;
@@ -24,7 +26,6 @@ import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 
-import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 
@@ -48,7 +49,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -64,31 +64,19 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     private String selectedTargetPath;
 
-    private static final int FILE_SELECT_CODE = 1001;
-    private static final int DIR_SELECT_CODE  = 1002;
-    private static final int PERM_REQUEST_CODE = 2001;
 
-    private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1;
-    private static final int PERMISSION_REQUEST_CODE = 3;
-
-    private CallbackContext callbackContext;
-    private String pendingAction;
-    private String pendingMimeType;
-    /*
-   private static final int REQ_WRITE_EXT = 1234;
-    // Pending conversion variables
-    private String pendingConversionUri;
-    private CallbackContext pendingConversionCallback;
 
 
     private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1;
     private static final int FILE_SELECT_CODE = 2;
     private static final int PERMISSION_REQUEST_CODE = 3;
 
-    */
+    private String pendingAction;
+    private String pendingMimeType;
+
+
 
     private CallbackContext currentCallbackContext;
-    private JSONObject currentPermissionsStatus;
 
     private static final long BASE64_THRESHOLD = 35 * 1024 * 1024; // 35 MB
     
@@ -125,7 +113,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
             JSONObject options = args.getJSONObject(0);
             String mimeType = options.optString("mime");
             boolean isBase64 = options.optBoolean("isBase64");
-
+            this.pendingMimeType = mimeType;
             try {
                 this.isGatBase64 = isBase64;
                 this.selectFile(mimeType);
@@ -167,16 +155,33 @@ public class CordovaSaveBlob extends CordovaPlugin {
             this.downloadFile(fileUrl, fileName, callbackContext);
             return true;
         } else if (action.equals("fileToBase64")) {
-            this.currentCallbackContext = callbackContext;
+
             JSONObject options = args.getJSONObject(0);
             // contoh /data/user/0/package/cache/test.mp3 (pastikan ini mendukung banyak jenis file audio/image/video/pdf
             String filePath = options.optString("filePath");
             this.fileToBase64(filePath, callbackContext);
             return true;
+        } else if (action.equals("openAppSettings")) {
+            openAppSettings();
+            return true;
         }
 
         return false;
     }
+
+
+
+    private void openAppSettings() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            Uri uri = Uri.fromParts("package", cordova.getActivity().getPackageName(), null);
+            intent.setData(uri);
+            cordova.getActivity().startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            currentCallbackContext.error("Unable to open settings");
+        }
+    }
+
 
 
 
@@ -844,7 +849,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Lanjutkan aksi tergantung pendingAction
@@ -857,6 +862,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 currentCallbackContext.error("Permission denied.");
             }
         }
+        return false;
     }
 
     @Override
@@ -1185,7 +1191,7 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
 
     private void checkAndRequestPermissions(JSONArray permissionsArr) throws JSONException {
-        currentPermissionsStatus = new JSONObject();
+        JSONObject currentPermissionsStatus = new JSONObject();
         ArrayList<String> toRequest = new ArrayList<>();
 
         for (int i = 0; i < permissionsArr.length(); i++) {

@@ -39,3 +39,7 @@ exports.isSupportExternalStorage = function (success, error) {
 exports.fileToBase64 = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'fileToBase64', [options]);
 };
+
+exports.openAppSettings = function (success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'openAppSettings', []);
+};
