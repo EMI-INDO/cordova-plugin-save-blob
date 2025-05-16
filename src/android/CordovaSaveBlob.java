@@ -225,10 +225,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 // Prepare result
                 JSONObject result = new JSONObject();
                 result.put("fileName", getFileName(uri, resolver));
-                result.put("base64Data", Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP));
+                result.put("base64", Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP));
                 result.put("mimeType", getMimeType(uri, resolver));
                 result.put("size", baos.size());
                 result.put("sizeReadable", getReadableSize(baos.size()));
+
+                Log.d("fileToBase64", "result: " + result.toString());
 
                 callbackContext.success(result);
 
