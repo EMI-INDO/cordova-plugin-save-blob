@@ -52,6 +52,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Random;
 
 /**
@@ -70,6 +71,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1;
     private static final int FILE_SELECT_CODE = 2;
     private static final int PERMISSION_REQUEST_CODE = 3;
+
+    private JSONObject currentPermissionsStatus;
 
     private String pendingAction;
     private String pendingMimeType;
@@ -829,81 +832,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-    private void selectFile(String mimeType) {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("*/*");
-        if (mimeType != null && !mimeType.isEmpty()) {
-            String[] mimetypes = { mimeType };
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
-        }
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
-    }
-
-    private void openDocumentTree() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(
-                Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
-                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-        );
-        cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
-    }
-
-    @Override
-    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Lanjutkan aksi tergantung pendingAction
-                if ("selectFiles".equals(pendingAction)) {
-                    selectFile(pendingMimeType);
-                } else if ("selectTargetPath".equals(pendingAction)) {
-                    openDocumentTree();
-                }
-            } else {
-                currentCallbackContext.error("Permission denied.");
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (resultCode != Activity.RESULT_OK || data == null) {
-            currentCallbackContext.error("Selection canceled.");
-            return;
-        }
-
-        Uri uri = data.getData();
-        if (uri == null) {
-            currentCallbackContext.error("Uri is null.");
-            return;
-        }
-
-
-
-        try {
-            final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION &
-                    (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            cordova.getActivity().getContentResolver()
-                    .takePersistableUriPermission(uri, takeFlags);
-        } catch (Exception e) {
-            // ignore
-        }
-
-        cordova.getThreadPool().execute(() -> {
-            try {
-                if (requestCode == FILE_SELECT_CODE) {
-                    handleSelectFile(uri);
-                } else if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
-                    handleSelectTargetPath(uri);
-                }
-            } catch (Exception e) {
-                currentCallbackContext.error("Error processing URI: " + e.getMessage());
-            }
-        });
-    }
-
 
 
 
@@ -1150,9 +1078,33 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
 
 
+/*
+    private void selectFile(String mimeType) {
+        cordova.getThreadPool().execute(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.setType(/"*//*");
+            if (mimeType != null && !mimeType.isEmpty()) {
+                String[] mimetypes = {mimeType};
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+            }
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
+        });
+    }
 
+    private void openDocumentTree() {
+        cordova.getThreadPool().execute(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            );
+            cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
+        });
+    }
 
-
+    */
 
 
     private String mapPermission(String permissionKey) {
@@ -1192,32 +1144,183 @@ private void handleSelectFile(Uri uri) throws JSONException {
     }
 
 
+
     private void checkAndRequestPermissions(JSONArray permissionsArr) throws JSONException {
-        JSONObject currentPermissionsStatus = new JSONObject();
-        ArrayList<String> toRequest = new ArrayList<>();
+        cordova.getThreadPool().execute(() -> {
+            currentPermissionsStatus = new JSONObject();
+            ArrayList<String> toRequest = new ArrayList<>();
 
-        for (int i = 0; i < permissionsArr.length(); i++) {
-            String key = permissionsArr.getString(i);
-            String perm = mapPermission(key);
-            if (perm == null) continue;
+            Context ctx = cordova.getActivity();
 
-            boolean granted = ContextCompat.checkSelfPermission( cordova.getContext(), perm) == PackageManager.PERMISSION_GRANTED;
-
-            currentPermissionsStatus.put(perm, granted);
-            if (!granted) {
-                toRequest.add(perm);
+            for (int i = 0; i < permissionsArr.length(); i++) {
+                String key = null;
+                try {
+                    key = permissionsArr.getString(i);
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                String perm = mapPermission(key);
+                if (perm == null) {
+                    // Lewati jika tidak perlu dipetakan (API level baru)
+                    continue;
+                }
+                boolean granted = ContextCompat.checkSelfPermission(ctx, perm)
+                        == PackageManager.PERMISSION_GRANTED;
+                try {
+                    currentPermissionsStatus.put(perm, granted);
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                if (!granted) {
+                    toRequest.add(perm);
+                }
             }
-        }
 
-        if (toRequest.isEmpty()) {
-            currentCallbackContext.success(currentPermissionsStatus);
-        } else {
-            String[] permsArray = toRequest.toArray(new String[0]);
-            PermissionHelper.requestPermissions(this, PERMISSION_REQUEST_CODE, permsArray);
-        }
+            if (toRequest.isEmpty()) {
+                // Semua sudah granted, langsung callback sukses
+                currentCallbackContext.success(currentPermissionsStatus);
+                // Bersihkan callback agar tidak dipakai lagi
+                //  Log.d(TAG, "currentPermissionsStatus: " + currentPermissionsStatus);
+                currentCallbackContext = null;
+            } else {
+                // Minta permission yang belum granted
+                String[] permsArray = toRequest.toArray(new String[0]);
+                // Cordova PermissionHelper (pastikan import org.apache.cordova.PermissionHelper)
+                PermissionHelper.requestPermissions(this, PERMISSION_REQUEST_CODE, permsArray);
+            }
+
+        });
+
     }
 
 
+
+
+
+    private void selectFile(String mimeType) {
+        cordova.getThreadPool().execute(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.setType("*/*");
+            if (mimeType != null && !mimeType.isEmpty()) {
+                String[] mimetypes = {mimeType};
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
+            }
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
+        });
+    }
+
+    private void openDocumentTree() {
+        cordova.getThreadPool().execute(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            );
+            cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
+        });
+    }
+
+    @Override
+    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Lanjutkan aksi tergantung pendingAction
+                if ("selectFiles".equals(pendingAction)) {
+                    selectFile(pendingMimeType);
+                } else if ("selectTargetPath".equals(pendingAction)) {
+                    openDocumentTree();
+                }
+            } else {
+                currentCallbackContext.error("Permission denied.");
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            currentCallbackContext.error("Selection canceled.");
+            return;
+        }
+
+        Uri uri = data.getData();
+        if (uri == null) {
+            currentCallbackContext.error("Uri is null.");
+            return;
+        }
+
+
+
+        try {
+            final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION &
+                    (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            cordova.getActivity().getContentResolver()
+                    .takePersistableUriPermission(uri, takeFlags);
+        } catch (Exception e) {
+            // ignore
+        }
+
+        cordova.getThreadPool().execute(() -> {
+            try {
+                if (requestCode == FILE_SELECT_CODE) {
+                    handleSelectFile(uri);
+                } else if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
+                    handleSelectTargetPath(uri);
+                }
+            } catch (Exception e) {
+                currentCallbackContext.error("Error processing URI: " + e.getMessage());
+            }
+        });
+    }
+
+
+
+
+
+
+
+    /*
+    private void checkAndRequestPermissions(JSONArray permissionsArr) throws JSONException {
+        cordova.getThreadPool().execute(() -> {
+            currentPermissionsStatus = new JSONObject();
+
+            ArrayList<String> toRequest = new ArrayList<>();
+
+            for (int i = 0; i < permissionsArr.length(); i++) {
+                String key = null;
+                try {
+                    key = permissionsArr.getString(i);
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                String perm = mapPermission(key);
+                if (perm == null) continue;
+
+                boolean granted = ContextCompat.checkSelfPermission(cordova.getContext(), perm) == PackageManager.PERMISSION_GRANTED;
+
+                try {
+                    currentPermissionsStatus.put(perm, granted);
+                } catch (JSONException e) {
+                    throw new RuntimeException(e);
+                }
+                if (!granted) {
+                    toRequest.add(perm);
+                }
+            }
+
+            if (toRequest.isEmpty()) {
+                currentCallbackContext.success(currentPermissionsStatus);
+            } else {
+                String[] permsArray = toRequest.toArray(new String[0]);
+                PermissionHelper.requestPermissions(this, PERMISSION_REQUEST_CODE, permsArray);
+            }
+        });
+    }
+
+*/
 
 /*
     @Override
