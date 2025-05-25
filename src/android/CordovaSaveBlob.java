@@ -73,13 +73,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private static final int PERMISSION_REQUEST_CODE = 3;
 
     private JSONObject currentPermissionsStatus;
-
+    private CallbackContext currentCallbackContext;
     private String pendingAction;
     private String pendingMimeType;
 
 
 
-    private CallbackContext currentCallbackContext;
+
 
     private static final long BASE64_THRESHOLD = 35 * 1024 * 1024; // 35 MB
     
@@ -1196,11 +1196,12 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
 
 
-
+/*
     private void selectFile(String mimeType) {
         cordova.getThreadPool().execute(() -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.setType("*/*");
+            intent.setType("*///*");
+    /*
             if (mimeType != null && !mimeType.isEmpty()) {
                 String[] mimetypes = {mimeType};
                 intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
@@ -1209,6 +1210,35 @@ private void handleSelectFile(Uri uri) throws JSONException {
             cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
         });
     }
+
+    */
+
+
+
+
+
+
+
+    private void selectFile(String mimeType) {
+        cordova.getThreadPool().execute(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.setType("*/*");
+            if (mimeType != null && !mimeType.isEmpty()) {
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{ mimeType });
+            }
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            // Tambahkan flag agar kita bisa takePersistableUriPermission
+            intent.addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            );
+            cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
+        });
+    }
+
+
+
 
     private void openDocumentTree() {
         cordova.getThreadPool().execute(() -> {
@@ -1255,6 +1285,20 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
 
         try {
+            @SuppressLint("WrongConstant")
+            final int takeFlags = data.getFlags()
+                    & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            cordova.getActivity().getContentResolver()
+                    .takePersistableUriPermission(uri, takeFlags);
+        } catch (Exception e) {
+            // ignore
+        }
+
+
+
+
+/*
+        try {
             final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION &
                     (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             cordova.getActivity().getContentResolver()
@@ -1262,7 +1306,7 @@ private void handleSelectFile(Uri uri) throws JSONException {
         } catch (Exception e) {
             // ignore
         }
-
+*/
         cordova.getThreadPool().execute(() -> {
             try {
                 if (requestCode == FILE_SELECT_CODE) {
