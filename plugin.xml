@@ -1,10 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-save-blob" version="0.0.3-beta.8"
+<plugin id="cordova-plugin-save-blob" version="0.0.3-beta.9"
     xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <name>Cordova Plugin lugin SaveBlob</name>
-    <description>WebRTC Convert Blob to base64Data save/downlaod</description>
+    <name>Cordova Plugin Document File</name>
+    <description>Cordova Plugin Document File</description>
     <author>EMI INDO</author>
     <license>ISC</license>
 
@@ -18,15 +18,14 @@
                 <param name="android-package" value="emi.indo.cordova.plugin.save.blob.CordovaSaveBlob" />
             </feature>
         </config-file>
-
        
-       <preference name="IS_CAMERA_PERMISSION" default="false" />
-       <preference name="IS_READ_MEDIA_VIDEO" default="false" />
-       <preference name="IS_READ_MEDIA_IMAGES" default="false" />
+        <preference name="IS_CAMERA_PERMISSION" default="false" />
+        <preference name="IS_READ_M_VIDEO_PERMISSION" default="false" />
+        <preference name="IS_READ_M_IMAGES_PERMISSION" default="false" />
+        <preference name="IS_MANAGE_STORAGE_PERMISSION" default="false" />
 
        <hook type="after_plugin_install" src="hooks/before_plugin_install.js" />
        <hook type="after_platform_add" src="hooks/before_plugin_install.js" />
-
 
         <preference name="DOCUMENT_FILE_VERSION" default="1.0.1" />
 

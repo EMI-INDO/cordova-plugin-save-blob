@@ -144,11 +144,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
             String fileName = options.optString("fileName");
             this.downloadFile(fileUrl, isCreateStringBase64, saveToPath, fileName, callbackContext);
             return true;
+            
         } else if (action.equals("fileToBase64")) {
             JSONObject options = args.getJSONObject(0);
             String filePath = options.optString("filePath");
             this.fileToBase64(filePath, callbackContext); // response render in html element
             return true;
+            
         } else if (action.equals("openAppSettings")) {
             // Once the user has set the permissions, they can only be changed manually from the app settings.
             this.openAppSettings();
@@ -161,15 +163,30 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
+    private void registerWebRTC() {
+
+        if (mCordovaWebView.getView() instanceof WebView) {
+            ((WebView) mCordovaWebView.getView()).setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    cordova.getActivity().runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+
+                            request.grant(request.getResources());
+                        }
+                    });
+                }
+            });
+
+        }
+
+    }
 
 
-    private void downloadFile(
-            String fileUrl,
-            boolean isCreateStringBase64,
-            String saveToPath,
-            String fileName,
-            CallbackContext callbackContext
-    ) {
+
+    private void downloadFile(String fileUrl, boolean isCreateStringBase64, String saveToPath, String fileName, CallbackContext callbackContext) {
+
         cordova.getThreadPool().execute(() -> {
             HttpURLConnection conn = null;
             InputStream in = null;
@@ -177,7 +194,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
             ByteArrayOutputStream baos = null;
 
             try {
-                Log.d(TAG, "Download file: " + fileUrl);
+              //  Log.d(TAG, "Download file: " + fileUrl);
                 URL url = new URL(fileUrl);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -212,7 +229,10 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     return;
                 }
 
-                long fileLength = conn.getContentLengthLong();
+                long fileLength = 0;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    fileLength = conn.getContentLengthLong();
+                }
                 Uri targetUri = prepareTargetUri(
                         cordova.getActivity().getContentResolver(),
                         saveToPath,
@@ -360,62 +380,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
             }
         });
     }
-
-
-    /*
-    private String getFileName(Uri uri, ContentResolver resolver) {
-        if ("content".equals(uri.getScheme())) {
-            try (Cursor cursor = resolver.query(uri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    if (nameIndex != -1) {
-                        return cursor.getString(nameIndex);
-                    }
-                }
-            } catch (Exception e) {
-                // Fall through to path extraction
-            }
-        }
-        return uri.getLastPathSegment();
-    }
-
-    private String getMimeType(Uri uri, ContentResolver resolver) {
-        String mimeType = null;
-        if ("content".equals(uri.getScheme())) {
-            mimeType = resolver.getType(uri);
-        }
-        if (mimeType == null) {
-            String fileExtension = MimeTypeMap.getFileExtensionFromUrl(uri.toString());
-            mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileExtension.toLowerCase());
-        }
-        return mimeType != null ? mimeType : "application/octet-stream";
-    }
-
-*/
-
-
-
-
-    private void registerWebRTC(){
-
-        if (mCordovaWebView.getView() instanceof WebView) {
-            ((WebView) mCordovaWebView.getView()).setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    cordova.getActivity().runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-
-                            request.grant(request.getResources());
-                        }
-                    });
-                }
-            });
-
-        }
-
-    }
-
 
 
 
@@ -625,10 +589,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         File dst = new File(publicDir, fileName);
         if (dst.exists()) dst.delete();
 
-        // Logging debug
-       // Log.d("convertDataUri", "sourcePath=" + sourcePath);
-       // Log.d("convertDataUri", "publicDir="   + publicDir.getAbsolutePath());
-       // Log.d("convertDataUri", "dst full   =" + dst.getAbsolutePath());
 
         currentCallbackContext.success(dst.getAbsolutePath());
 
@@ -746,34 +706,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-/*
-    private String createBase64(DocumentFile documentFile) throws IOException {
-        InputStream inputStream = cordova.getContext().getContentResolver().openInputStream(documentFile.getUri());
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        byte[] buffer = new byte[1024];
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            byteArrayOutputStream.write(buffer, 0, bytesRead);
-        }
-        inputStream.close();
-        return Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT);
-    }
-
-
-    private String createBase64(Uri fileUri) throws IOException {
-        InputStream inputStream = cordova.getContext().getContentResolver().openInputStream(fileUri);
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        byte[] buffer = new byte[1024];
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            byteArrayOutputStream.write(buffer, 0, bytesRead);
-        }
-        inputStream.close();
-        return Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.DEFAULT);
-    }
-
-*/
-
     private void downloadBlob(final String saveToPath, final String base64Data, final String filename, final CallbackContext callbackContext) {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
@@ -833,7 +765,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                         callbackContext.error("Failed to retrieve metadata.");
                                     }
                                 } catch (JSONException e) {
-                                    // Log.e(TAG, "Error getting metadata: " + e.getMessage());
                                     callbackContext.error("Error getting metadata: " + e.getMessage());
                                 }
                             } else {
@@ -859,103 +790,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
         return contentValues;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-    /*
-    private void downloadFile(String fileUrl, String saveToPath, String fileName, CallbackContext callbackContext) {
-        cordova.getThreadPool().execute(() -> {
-            try {
-
-                URL url = new URL(fileUrl);
-                HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
-                urlConnection.setRequestMethod("GET");
-                urlConnection.connect();
-
-                if (urlConnection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-                    callbackContext.error("Failed to download file: " + urlConnection.getResponseMessage());
-                    return;
-                }
-
-                // Get the total file size
-                int fileLength = urlConnection.getContentLength();
-
-                // Create files in shared storage using MediaStore
-                ContentResolver contentResolver = cordova.getActivity().getContentResolver();
-                ContentValues contentValues = new ContentValues();
-                contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream");
-
-                contentValues.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
-
-                String baseName = fileName.substring(0, fileName.lastIndexOf('.'));
-                String extension = fileName.substring(fileName.lastIndexOf('.'));
-
-                String outputName = baseName + "_" + extension;
-
-                contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, outputName);
-
-                Uri uri = contentResolver.insert(MediaStore.Files.getContentUri("external"), contentValues);
-                if (uri == null) {
-                    callbackContext.error("Failed to create file in Downloads.");
-                    return;
-                }
-
-                InputStream inputStream = urlConnection.getInputStream();
-                OutputStream outputStream = contentResolver.openOutputStream(uri);
-
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                long totalBytesRead = 0;
-
-                while ((bytesRead = inputStream.read(buffer)) != -1) {
-                    assert outputStream != null;
-                    outputStream.write(buffer, 0, bytesRead);
-                    totalBytesRead += bytesRead;
-
-                    int progress = (int) ((totalBytesRead * 100) / fileLength);
-
-                    PluginResult progressResult = new PluginResult(PluginResult.Status.OK, progress);
-                    progressResult.setKeepCallback(true);
-                    callbackContext.sendPluginResult(progressResult);
-                }
-
-                outputStream.close();
-                inputStream.close();
-                urlConnection.disconnect();
-                callbackContext.success(uri.toString());
-            } catch (Exception e) {
-                callbackContext.error("Download failed: " + e.getMessage());
-            }
-        });
-    }
-*/
-
-
-    /*
-    // Generates a random string of 8 characters long
-    private String generateRandomString() {
-        String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder randomString = new StringBuilder();
-        Random random = new Random();
-        for (int i = 0; i < 8; i++) {
-            randomString.append(characters.charAt(random.nextInt(characters.length())));
-        }
-        return randomString.toString();
-    }
-
-*/
-
-
-
 
 
 
@@ -1105,158 +939,6 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
 
 
-    /*
-    private void handleSelectFile(Intent data) {
-        Uri uri = data.getData();
-        if (uri != null && this.currentCallbackContext != null) {
-            try {
-                String filePath = getFilePathFromUri(uri);
-                this.selectedTargetPath = filePath;
-                if (filePath != null && !filePath.isEmpty()) {
-                    JSONObject metaData = getMetadata(filePath);
-                    if (metaData != null) {
-                        this.currentCallbackContext.success(metaData);
-                    } else {
-                        this.currentCallbackContext.error("Failed to get metadata.");
-                    }
-                } else {
-                    this.currentCallbackContext.error("File path is null or empty.");
-                }
-            } catch (Exception e) {
-                this.currentCallbackContext.error("Failed to get file path: " + e.getMessage());
-            }
-        } else if (this.currentCallbackContext != null) {
-            this.currentCallbackContext.error("Uri is null.");
-        }
-    }
-
-*/
-
-/*
-
-    private JSONObject getMetadata(String filePath) throws JSONException, IOException {
-        File file = new File(filePath);
-        if (!file.exists()) {
-            return null;
-        }
-
-        JSONObject metaData = new JSONObject();
-        metaData.put("name", file.getName());
-        metaData.put("uriSAF", filePath);
-        metaData.put("size", file.length());
-
-        if (isCreateBase64) {
-            if (file.length() <= BASE64_THRESHOLD) {
-                String base64 = createBase64String(file);
-                metaData.put("base64", base64);
-            } else {
-                String base64Path = createBase64File(file);
-                metaData.put("base64FilePath", base64Path);
-            }
-        }
-
-        Log.d(TAG, "Metadata: " + metaData.toString());
-        return metaData;
-    }
-
-    private String createBase64String(File file) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (
-                BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-                Base64OutputStream b64os = new Base64OutputStream(baos, Base64.NO_WRAP)
-        ) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = bis.read(buffer)) != -1) {
-                b64os.write(buffer, 0, bytesRead);
-            }
-        }
-        return baos.toString("UTF-8");
-    }
-
-    private String createBase64File(File file) throws IOException {
-        File cacheDir = cordova.getActivity().getCacheDir();
-        File base64File = new File(cacheDir, file.getName() + ".b64");
-        try (
-                BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-                FileOutputStream fos = new FileOutputStream(base64File);
-                Base64OutputStream b64os = new Base64OutputStream(fos, Base64.NO_WRAP)
-        ) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = bis.read(buffer)) != -1) {
-                b64os.write(buffer, 0, bytesRead);
-            }
-        }
-        return base64File.getAbsolutePath();
-    }
-
-
-
-    private String getFilePathFromUri(Uri uri) {
-        if ("file".equalsIgnoreCase(uri.getScheme())) {
-            return uri.getPath();
-        } else if ("content".equalsIgnoreCase(uri.getScheme())) {
-            try (Cursor cursor = cordova.getContext().getContentResolver().query(uri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    if (index != -1) {
-                        String displayName = cursor.getString(index);
-                        @SuppressLint("UnsanitizedFilenameFromContentProvider") File file = new File(cordova.getContext().getCacheDir(), displayName);
-                        try (InputStream inputStream = cordova.getContext().getContentResolver().openInputStream(uri);
-                             FileOutputStream outputStream = new FileOutputStream(file)) {
-                            byte[] buffer = new byte[8192];
-                            int bytesRead;
-                            while (true) {
-                                assert inputStream != null;
-                                if ((bytesRead = inputStream.read(buffer)) == -1) break;
-                                outputStream.write(buffer, 0, bytesRead);
-                            }
-                            return file.getAbsolutePath();
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                this.currentCallbackContext.error("Error getting file path from URI" + e.getMessage());
-            }
-        }
-        return null;
-    }
-
-
-
-*/
-
-
-/*
-    private void selectFile(String mimeType) {
-        cordova.getThreadPool().execute(() -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.setType(/"*//*");
-            if (mimeType != null && !mimeType.isEmpty()) {
-                String[] mimetypes = {mimeType};
-                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
-            }
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
-        });
-    }
-
-    private void openDocumentTree() {
-        cordova.getThreadPool().execute(() -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-            intent.addFlags(
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
-                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-            );
-            cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
-        });
-    }
-
-    */
-
-
     private String mapPermission(String permissionKey) {
         Log.d(TAG, "mapPermission: " + permissionKey);
         switch (permissionKey) {
@@ -1374,7 +1056,7 @@ private void handleSelectFile(Uri uri) throws JSONException {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
+    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
             throws JSONException {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
@@ -1389,7 +1071,8 @@ private void handleSelectFile(Uri uri) throws JSONException {
                 currentCallbackContext.error("Permission denied.");
             }
         }
-        // tanpa return
+
+        return false;
     }
 
 
@@ -1429,187 +1112,6 @@ private void handleSelectFile(Uri uri) throws JSONException {
             }
         });
     }
-
-
-
-
-
-/*
-    private void selectFile(String mimeType) {
-        cordova.getThreadPool().execute(() -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.setType("*///*");
-    /*
-            if (mimeType != null && !mimeType.isEmpty()) {
-                String[] mimetypes = {mimeType};
-                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimetypes);
-            }
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            cordova.startActivityForResult(this, intent, FILE_SELECT_CODE);
-        });
-    }
-
-    */
-
-
-
-
-
-/*
-        try {
-            final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION &
-                    (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            cordova.getActivity().getContentResolver()
-                    .takePersistableUriPermission(uri, takeFlags);
-        } catch (Exception e) {
-            // ignore
-        }
-*/
-
-
-    /*
-    private void checkAndRequestPermissions(JSONArray permissionsArr) throws JSONException {
-        cordova.getThreadPool().execute(() -> {
-            currentPermissionsStatus = new JSONObject();
-
-            ArrayList<String> toRequest = new ArrayList<>();
-
-            for (int i = 0; i < permissionsArr.length(); i++) {
-                String key = null;
-                try {
-                    key = permissionsArr.getString(i);
-                } catch (JSONException e) {
-                    throw new RuntimeException(e);
-                }
-                String perm = mapPermission(key);
-                if (perm == null) continue;
-
-                boolean granted = ContextCompat.checkSelfPermission(cordova.getContext(), perm) == PackageManager.PERMISSION_GRANTED;
-
-                try {
-                    currentPermissionsStatus.put(perm, granted);
-                } catch (JSONException e) {
-                    throw new RuntimeException(e);
-                }
-                if (!granted) {
-                    toRequest.add(perm);
-                }
-            }
-
-            if (toRequest.isEmpty()) {
-                currentCallbackContext.success(currentPermissionsStatus);
-            } else {
-                String[] permsArray = toRequest.toArray(new String[0]);
-                PermissionHelper.requestPermissions(this, PERMISSION_REQUEST_CODE, permsArray);
-            }
-        });
-    }
-
-*/
-
-/*
-    @Override
-    public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == REQ_WRITE_EXT) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                try {
-                    String result = convertDataUriToFilePath(pendingConversionUri);
-                    pendingConversionCallback.success(result);
-                } catch (Exception e) {
-                    pendingConversionCallback.error("conversionUri Error: " + e.getMessage());
-                }
-            } else {
-                pendingConversionCallback.error("Permission WRITE_EXTERNAL_STORAGE ditolak");
-            }
-            pendingConversionUri = null;
-            pendingConversionCallback = null;
-            return;
-        }
-        // Original permissions handler
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            try {
-                for (int i = 0; i < permissions.length; i++) {
-                    boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
-                    currentPermissionsStatus.put(permissions[i], granted);
-                }
-                currentCallbackContext.success(currentPermissionsStatus);
-            } catch (JSONException e) {
-                currentCallbackContext.error("Error processing permissions result: " + e.getMessage());
-            }
-        }
-    }
-
-*/
-
-/*
-    private void openDocumentTree() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(
-                Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
-                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-        );
-        cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
-    }
-
-
-
-
-    private void handleSelectTargetPath(Uri data) {
-        Uri treeUri = data.getData();
-        if (treeUri == null) {
-            currentCallbackContext.error("Failed to select a directory.");
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            if (!DocumentsContract.isTreeUri(treeUri)) {
-                currentCallbackContext.error("Invalid directory URI.");
-                return;
-            }
-        }
-
-        final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
-
-        cordova.getContext().getContentResolver()
-                .takePersistableUriPermission(treeUri, takeFlags);
-
-        currentCallbackContext.success(treeUri.toString());
-    }
-
-
-
-    */
-
-
-
-/* goToFileLocation
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                handleSelectTargetPath(data);
-            } else {
-                currentCallbackContext.error("Directory selection canceled.");
-            }
-
-        } else if (requestCode == FILE_SELECT_CODE) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                cordova.getThreadPool().execute(() -> handleSelectFile(data));
-            } else {
-                currentCallbackContext.error("File selection canceled.");
-            }
-
-        } else {
-            if (currentCallbackContext != null) {
-                currentCallbackContext.error("Unhandled activity result: " + requestCode);
-            }
-        }
-    }
-
-
-*/
 
 
 
