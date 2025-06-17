@@ -1,7 +1,7 @@
 {
   "name": "cordova-plugin-save-blob",
-  "version": "0.0.3-beta.10",
-  "description": "WebRTC Convert Blob to base64Data save/downlaod",
+  "version": "0.0.3",
+  "description": "CordovaSaveBlob Plugin ( Document File )",
   "cordova": {
     "id": "cordova-plugin-save-blob",
     "platforms": [
