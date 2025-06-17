@@ -1,4 +1,8 @@
 
+- You can handle, manipulate, any image, audio, video processed by the server, or AI, or files on the user's device.
+- I am currently creating a new plugin cordova-plugin-opencv later cordova-plugin-save-blob will become a dependency to handle the cordova-plugin-opencv process. https://github.com/opencv/opencv
+- This plugin is also designed to handle WebRTC: https://webrtc.github.io/samples/
+
 ---
 
 # CordovaSaveBlob Plugin ( Document File )

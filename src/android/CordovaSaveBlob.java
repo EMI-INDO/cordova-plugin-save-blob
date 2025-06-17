@@ -78,6 +78,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
     // handle with if(parseFloat(sizeReadable) <20)
     private Boolean isCreateBase64 = false;
     private Boolean isSaveCreateBase64 = false;
+    private Boolean isFileCreateBase64 = false;
 
 
     @Override
@@ -148,6 +149,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
         } else if (action.equals("fileToBase64")) {
             JSONObject options = args.getJSONObject(0);
             String filePath = options.optString("filePath");
+            isFileCreateBase64 = true;
             this.fileToBase64(filePath, callbackContext); // response render in html element
             return true;
             
@@ -863,7 +865,7 @@ private void handleSelectFile(Uri uri) throws JSONException {
         }
 
         // method action.equals("selectFiles")
-        if (isCreateBase64) {
+        if (isCreateBase64 || isFileCreateBase64) {
             try {
                 String base64 = createBase64String(uri);
                 meta.put("base64", base64);
@@ -1055,8 +1057,10 @@ private void handleSelectFile(Uri uri) throws JSONException {
         });
     }
 
+
+
     @Override
-    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
             throws JSONException {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
@@ -1072,8 +1076,11 @@ private void handleSelectFile(Uri uri) throws JSONException {
             }
         }
 
-        return false;
+
     }
+
+
+
 
 
 
