@@ -942,41 +942,48 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
 
     private String mapPermission(String permissionKey) {
-        Log.d(TAG, "mapPermission: " + permissionKey);
-        switch (permissionKey) {
-            case "RECORD_AUDIO":
-                return Manifest.permission.RECORD_AUDIO;
-            case "MODIFY_AUDIO_SETTINGS":
-                return Manifest.permission.MODIFY_AUDIO_SETTINGS;
-            case "READ_EXTERNAL_STORAGE":
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    return Manifest.permission.READ_EXTERNAL_STORAGE;
-                }
-                return null;
-            case "WRITE_EXTERNAL_STORAGE":
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    return Manifest.permission.WRITE_EXTERNAL_STORAGE;
-                }
-                return null;
-            case "READ_MEDIA_AUDIO":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    return Manifest.permission.READ_MEDIA_AUDIO;
-                }
-                return null;
-            case "READ_MEDIA_VIDEO":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    return Manifest.permission.READ_MEDIA_VIDEO;
-                }
-                return null;
-            case "READ_MEDIA_IMAGES":
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    return Manifest.permission.READ_MEDIA_IMAGES;
-                }
-                return null;
-            default:
-                return null;
-        }
-    }
+        // Log.d(TAG, "mapPermission: " + permissionKey);
+         switch (permissionKey) {
+             case "RECORD_AUDIO":
+                 return Manifest.permission.RECORD_AUDIO;
+             case "MODIFY_AUDIO_SETTINGS":
+                 return Manifest.permission.MODIFY_AUDIO_SETTINGS;
+             case "CAMERA":
+                 return Manifest.permission.CAMERA;
+             case "READ_EXTERNAL_STORAGE":
+                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                     return Manifest.permission.READ_EXTERNAL_STORAGE;
+                 }
+                 return null;
+             case "WRITE_EXTERNAL_STORAGE":
+                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                     return Manifest.permission.WRITE_EXTERNAL_STORAGE;
+                 }
+                 return null;
+             case "MANAGE_EXTERNAL_STORAGE":
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                     return Manifest.permission.MANAGE_EXTERNAL_STORAGE;
+                 }
+                 return null;
+             case "READ_MEDIA_AUDIO":
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                     return Manifest.permission.READ_MEDIA_AUDIO;
+                 }
+                 return null;
+             case "READ_MEDIA_VIDEO":
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                     return Manifest.permission.READ_MEDIA_VIDEO;
+                 }
+                 return null;
+             case "READ_MEDIA_IMAGES":
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                     return Manifest.permission.READ_MEDIA_IMAGES;
+                 }
+                 return null;
+             default:
+                 return null;
+         }
+     }
 
 
 

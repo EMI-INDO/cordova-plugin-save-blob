@@ -121,7 +121,6 @@ module.exports = function (context) {
        // console.log('[save-blob-plugin] Added requestLegacyExternalStorage');
     }
 
-    // 9) Simpan perubahan kalau ada
     if (modified) {
         fs.writeFileSync(manifestPath, xml, 'utf8');
         console.log('[save-blob-plugin] AndroidManifest.xml updated');

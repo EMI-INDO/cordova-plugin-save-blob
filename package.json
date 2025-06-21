@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-save-blob",
-  "version": "0.0.3",
+  "version": "0.0.4-beta.1",
   "description": "CordovaSaveBlob Plugin ( Document File )",
   "cordova": {
     "id": "cordova-plugin-save-blob",
@@ -19,5 +19,13 @@
   ],
   "author": "EMI INDO",
   "email": "cordova.c3addon@gmail.com",
-  "license": "ISC"
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EMI-INDO/cordova-plugin-save-blob.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EMI-INDO/cordova-plugin-save-blob/issues"
+  },
+  "homepage": "https://github.com/EMI-INDO/cordova-plugin-save-blob#readme"
 }
