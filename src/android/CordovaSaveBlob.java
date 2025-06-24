@@ -396,10 +396,31 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
                     if (lower.endsWith(".mp3")
                             || lower.endsWith(".wav")
+                            || lower.endsWith(".aac")
+                            || lower.endsWith(".ogg")
+                            || lower.endsWith(".flac")
                             || lower.endsWith(".m4a")
+                            || lower.endsWith(".wma")
+                            || lower.endsWith(".opus")
+                            || lower.endsWith(".amr")
+                            || lower.endsWith(".ac3")
+                            || lower.endsWith(".aiff")
+                            || lower.endsWith(".mp2")
+                            || lower.endsWith(".wv")
+                            || lower.endsWith(".alac")
                             || lower.endsWith(".mp4")
+                            || lower.endsWith(".m4v")
                             || lower.endsWith(".3gp")
+                            || lower.endsWith(".3g2")
                             || lower.endsWith(".mkv")
+                            || lower.endsWith(".webm")
+                            || lower.endsWith(".avi")
+                            || lower.endsWith(".mov")
+                            || lower.endsWith(".flv")
+                            || lower.endsWith(".mpeg")
+                            || lower.endsWith(".mpg")
+                            || lower.endsWith(".ts")
+                            || lower.endsWith(".wmv")
                             || lower.endsWith(".jpg")
                             || lower.endsWith(".jpeg")
                             || lower.endsWith(".png")
@@ -408,6 +429,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                             || lower.endsWith(".txt")) {
                         finalPath = convertContentUriToFilePathName(uriPath);
                     }
+
 
                     else {
                         finalPath = convertContentUriToFilePath(uriPath);
