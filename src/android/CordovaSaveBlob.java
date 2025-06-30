@@ -157,9 +157,193 @@ public class CordovaSaveBlob extends CordovaPlugin {
             // Once the user has set the permissions, they can only be changed manually from the app settings.
             this.openAppSettings();
             return true;
+        } else if ("getAllMedia".equals(action)) {
+            JSONObject options = args.getJSONObject(0);
+            String mediaType = options.optString("mediaType", "image");
+            boolean toBase64 = options.optBoolean("toBase64", false);
+            getAllMedia(mediaType, toBase64, callbackContext);
+            return true;
         }
 
         return false;
+    }
+
+
+
+    private void getAllMedia(String mediaType, boolean toBase64, CallbackContext callbackContext) {
+        cordova.getThreadPool().execute(() -> {
+            try {
+                ContentResolver cr = cordova.getActivity().getContentResolver();
+                Uri uri;
+                String[] projection;
+                String selection    = null;
+                String[] selArgs    = null;
+                String sortOrder;
+
+                switch (mediaType) {
+                    case "image":
+                        uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                        projection = new String[]{
+                                MediaStore.Images.Media._ID,
+                                MediaStore.Images.Media.DISPLAY_NAME,
+                                MediaStore.Images.Media.MIME_TYPE,
+                                MediaStore.Images.Media.DATA,
+                                MediaStore.Images.Media.DATE_ADDED
+                        };
+                        sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
+                        break;
+
+                    case "video":
+                        uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                        projection = new String[]{
+                                MediaStore.Video.Media._ID,
+                                MediaStore.Video.Media.DISPLAY_NAME,
+                                MediaStore.Video.Media.MIME_TYPE,
+                                MediaStore.Video.Media.DATA,
+                                MediaStore.Video.Media.DATE_ADDED,
+                                MediaStore.Video.Media.DURATION
+                        };
+                        sortOrder = MediaStore.Video.Media.DATE_ADDED + " DESC";
+                        break;
+
+                    case "audio":
+                        uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+                        projection = new String[]{
+                                MediaStore.Audio.Media._ID,
+                                MediaStore.Audio.Media.TITLE,
+                                MediaStore.Audio.Media.ARTIST,
+                                MediaStore.Audio.Media.ALBUM,
+                                MediaStore.Audio.Media.ALBUM_ID,
+                                MediaStore.Audio.Media.MIME_TYPE,
+                                MediaStore.Audio.Media.DATA,
+                                MediaStore.Audio.Media.DATE_ADDED
+                        };
+                        selection = MediaStore.Audio.Media.IS_MUSIC + "!= 0";
+                        sortOrder = MediaStore.Audio.Media.DATE_ADDED + " DESC";
+                        break;
+
+                    case "pdf":
+                        uri = MediaStore.Files.getContentUri("external");
+                        projection = new String[]{
+                                MediaStore.Files.FileColumns._ID,
+                                MediaStore.Files.FileColumns.DISPLAY_NAME,
+                                MediaStore.Files.FileColumns.MIME_TYPE,
+                                MediaStore.Files.FileColumns.DATA,
+                                MediaStore.Files.FileColumns.DATE_ADDED
+                        };
+                        selection = MediaStore.Files.FileColumns.MIME_TYPE + "=?";
+                        selArgs   = new String[]{ "application/pdf" };
+                        sortOrder = MediaStore.Files.FileColumns.DATE_ADDED + " DESC";
+                        break;
+
+                    default:
+                        callbackContext.error("Unsupported mediaType: " + mediaType);
+                        return;
+                }
+
+                Cursor cursor = cr.query(uri, projection, selection, selArgs, sortOrder);
+                if (cursor == null) {
+                    callbackContext.error("Failed to query " + mediaType);
+                    return;
+                }
+
+                JSONArray resultArray = new JSONArray();
+                while (cursor.moveToNext()) {
+                    JSONObject obj = new JSONObject();
+                    long id        = cursor.getLong(cursor.getColumnIndexOrThrow(projection[0]));
+                    Uri contentUri= ContentUris.withAppendedId(uri, id);
+
+                    String name   = cursor.getString(cursor.getColumnIndexOrThrow(projection[1]));
+                    String mime   = cursor.getString(cursor.getColumnIndexOrThrow(projection[2]));
+                    String path   = cursor.getString(cursor.getColumnIndexOrThrow(projection[3]));
+                    long size       = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
+                    long dateAdded = cursor.getLong(cursor.getColumnIndexOrThrow(projection[4]));
+
+                    obj.put("id",        id);
+                    obj.put("uri",       contentUri.toString());
+                    obj.put("name",      name);
+                    obj.put("mimeType",  mime);
+                    obj.put("path",      path);
+                    obj.put("size",       size);
+                    obj.put("dateAdded", dateAdded);
+
+                    // Traditional file path
+                    String realPath = getRealPathFromUri(contentUri);
+                    obj.put("filePath", realPath != null ? realPath : path);
+
+                    // Optional Base64 of the file itself
+                    if (toBase64) {
+                        try (InputStream is = cr.openInputStream(contentUri);
+                             ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+                            byte[] buf = new byte[4096];
+                            int len;
+                            while (is != null && (len = is.read(buf)) > 0) {
+                                bos.write(buf, 0, len);
+                            }
+                            String b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
+                            obj.put("data", b64);
+                        } catch (Exception e) {
+                            Log.w(TAG, "Error encoding base64 for id=" + id + ": " + e.getMessage());
+                        }
+                    }
+
+                    // Fields khusus
+                    if ("video".equals(mediaType)) {
+                        long duration = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION));
+                        obj.put("duration", duration);
+                    }
+                    if ("audio".equals(mediaType)) {
+                        obj.put("title",  name);
+                        obj.put("artist", cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)));
+                        obj.put("album",  cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)));
+                        long duration = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION));
+                        obj.put("duration", duration);
+
+                        // Optional: cover art Base64
+                        if (toBase64) {
+                            long albumId = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID));
+                            Uri artUri   = ContentUris.withAppendedId(
+                                    Uri.parse("content://media/external/audio/albumart"),
+                                    albumId
+                            );
+                            try (InputStream is2 = cr.openInputStream(artUri);
+                                 ByteArrayOutputStream bos2 = new ByteArrayOutputStream()) {
+                                byte[] buf2 = new byte[4096];
+                                int len2;
+                                while (is2 != null && (len2 = is2.read(buf2)) > 0) {
+                                    bos2.write(buf2, 0, len2);
+                                }
+                                String coverB64 = Base64.encodeToString(bos2.toByteArray(), Base64.NO_WRAP);
+                                obj.put("coverData", coverB64);
+                            } catch (Exception ignored) { }
+                        }
+                    }
+
+                    resultArray.put(obj);
+                }
+                cursor.close();
+
+                callbackContext.success(resultArray);
+
+            } catch (Exception e) {
+               // Log.e(TAG, "getAllMedia error", e);
+                callbackContext.error("Error getting " + mediaType + ": " + e.getMessage());
+            }
+        });
+    }
+
+    private String getRealPathFromUri(Uri uri) {
+        String realPath = null;
+        String[] proj   = { MediaStore.MediaColumns.DATA };
+        ContentResolver cr = cordova.getActivity().getContentResolver();
+        try (Cursor c = cr.query(uri, proj, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                realPath = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getRealPathFromUri error: " + e.getMessage());
+        }
+        return realPath;
     }
 
 

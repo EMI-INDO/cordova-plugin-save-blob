@@ -35,3 +35,7 @@ exports.fileToBase64 = function (options, success, error) {
 exports.openAppSettings = function (success, error) {
     exec(success, error, 'CordovaSaveBlob', 'openAppSettings', []);
 };
+
+exports.getAllMedia = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'getAllMedia', [options]);
+};
