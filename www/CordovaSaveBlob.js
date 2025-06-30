@@ -36,6 +36,6 @@ exports.openAppSettings = function (success, error) {
     exec(success, error, 'CordovaSaveBlob', 'openAppSettings', []);
 };
 
-exports.getAllMedia = function (options, success, error) {
-    exec(success, error, 'CordovaSaveBlob', 'getAllMedia', [options]);
+exports.showMediaPicker = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'showMediaPicker', [options]);
 };

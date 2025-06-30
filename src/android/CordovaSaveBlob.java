@@ -18,6 +18,7 @@ import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
+import android.text.format.Formatter;
 import android.util.Base64;
 import android.util.Log;
 import android.webkit.PermissionRequest;
@@ -157,11 +158,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
             // Once the user has set the permissions, they can only be changed manually from the app settings.
             this.openAppSettings();
             return true;
-        } else if ("getAllMedia".equals(action)) {
+            
+        } else if ("showMediaPicker".equals(action)) {
             JSONObject options = args.getJSONObject(0);
             String mediaType = options.optString("mediaType", "image");
             boolean toBase64 = options.optBoolean("toBase64", false);
-            getAllMedia(mediaType, toBase64, callbackContext);
+            showMediaPicker(mediaType, toBase64, callbackContext);
             return true;
         }
 
@@ -170,7 +172,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-    private void getAllMedia(String mediaType, boolean toBase64, CallbackContext callbackContext) {
+    private void showMediaPicker(String mediaType, boolean toBase64, CallbackContext callbackContext) {
         cordova.getThreadPool().execute(() -> {
             try {
                 ContentResolver cr = cordova.getActivity().getContentResolver();
@@ -188,6 +190,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                 MediaStore.Images.Media.DISPLAY_NAME,
                                 MediaStore.Images.Media.MIME_TYPE,
                                 MediaStore.Images.Media.DATA,
+                                MediaStore.MediaColumns.SIZE,
                                 MediaStore.Images.Media.DATE_ADDED
                         };
                         sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
@@ -201,7 +204,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                 MediaStore.Video.Media.MIME_TYPE,
                                 MediaStore.Video.Media.DATA,
                                 MediaStore.Video.Media.DATE_ADDED,
-                                MediaStore.Video.Media.DURATION
+                                MediaStore.Video.Media.DURATION,
+                                MediaStore.MediaColumns.SIZE
                         };
                         sortOrder = MediaStore.Video.Media.DATE_ADDED + " DESC";
                         break;
@@ -216,27 +220,33 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                 MediaStore.Audio.Media.ALBUM_ID,
                                 MediaStore.Audio.Media.MIME_TYPE,
                                 MediaStore.Audio.Media.DATA,
+                                MediaStore.MediaColumns.SIZE,
+                                MediaStore.Audio.Media.DURATION,
                                 MediaStore.Audio.Media.DATE_ADDED
                         };
                         selection = MediaStore.Audio.Media.IS_MUSIC + "!= 0";
                         sortOrder = MediaStore.Audio.Media.DATE_ADDED + " DESC";
                         break;
 
-                    case "pdf":
+                    case "pdf": 
+                        // only permissions android.permission.MANAGE_EXTERNAL_STORAGE | or use the selectFiles method
                         uri = MediaStore.Files.getContentUri("external");
                         projection = new String[]{
                                 MediaStore.Files.FileColumns._ID,
                                 MediaStore.Files.FileColumns.DISPLAY_NAME,
                                 MediaStore.Files.FileColumns.MIME_TYPE,
                                 MediaStore.Files.FileColumns.DATA,
+                                MediaStore.MediaColumns.SIZE,
                                 MediaStore.Files.FileColumns.DATE_ADDED
                         };
-                        selection = MediaStore.Files.FileColumns.MIME_TYPE + "=?";
-                        selArgs   = new String[]{ "application/pdf" };
+                        selection = "(" + MediaStore.Files.FileColumns.MIME_TYPE + " LIKE ? OR " +
+                                MediaStore.Files.FileColumns.DISPLAY_NAME + " LIKE ?)";
+                        selArgs = new String[]{ "%pdf%", "%.pdf" };
                         sortOrder = MediaStore.Files.FileColumns.DATE_ADDED + " DESC";
                         break;
-
+                        
                     default:
+                      //  Log.e(TAG, "Unsupported mediaType: " + mediaType);
                         callbackContext.error("Unsupported mediaType: " + mediaType);
                         return;
                 }
@@ -256,8 +266,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     String name   = cursor.getString(cursor.getColumnIndexOrThrow(projection[1]));
                     String mime   = cursor.getString(cursor.getColumnIndexOrThrow(projection[2]));
                     String path   = cursor.getString(cursor.getColumnIndexOrThrow(projection[3]));
-                    long size       = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
-                    long dateAdded = cursor.getLong(cursor.getColumnIndexOrThrow(projection[4]));
+                    long size      = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE));
+                    long dateAdded = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_ADDED));
+
+                    // human-readable size
+                    String humanSize = Formatter.formatShortFileSize(cordova.getActivity(), size);
+                    obj.put("humanSize", humanSize);
 
                     obj.put("id",        id);
                     obj.put("uri",       contentUri.toString());
@@ -266,6 +280,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     obj.put("path",      path);
                     obj.put("size",       size);
                     obj.put("dateAdded", dateAdded);
+
 
                     // Traditional file path
                     String realPath = getRealPathFromUri(contentUri);
@@ -287,10 +302,18 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         }
                     }
 
-                    // Fields khusus
+
                     if ("video".equals(mediaType)) {
                         long duration = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION));
                         obj.put("duration", duration);
+
+                        // human-readable duration mm:ss
+                        int totalSec = (int) (duration / 1000);
+                        int min = totalSec / 60;
+                        int sec = totalSec % 60;
+                        String humanDuration = String.format(Locale.getDefault(), "%02d:%02d", min, sec);
+                        obj.put("humanDuration", humanDuration);
+                        
                     }
                     if ("audio".equals(mediaType)) {
                         obj.put("title",  name);
@@ -298,6 +321,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         obj.put("album",  cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)));
                         long duration = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION));
                         obj.put("duration", duration);
+
+                        // human-readable duration mm:ss
+                        int totalSec = (int) (duration / 1000);
+                        int min = totalSec / 60;
+                        int sec = totalSec % 60;
+                        String humanDuration = String.format(Locale.getDefault(), "%02d:%02d", min, sec);
+                        obj.put("humanDuration", humanDuration);
 
                         // Optional: cover art Base64
                         if (toBase64) {
@@ -326,7 +356,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 callbackContext.success(resultArray);
 
             } catch (Exception e) {
-               // Log.e(TAG, "getAllMedia error", e);
+               // Log.e(TAG, "showMediaPicker error", e);
                 callbackContext.error("Error getting " + mediaType + ": " + e.getMessage());
             }
         });
@@ -380,7 +410,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
             ByteArrayOutputStream baos = null;
 
             try {
-              //  Log.d(TAG, "Download file: " + fileUrl);
                 URL url = new URL(fileUrl);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -613,8 +642,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                             || lower.endsWith(".txt")) {
                         finalPath = convertContentUriToFilePathName(uriPath);
                     }
-
-
+                    
                     else {
                         finalPath = convertContentUriToFilePath(uriPath);
                     }
@@ -933,14 +961,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
                                     out.close();
                                     try {
                                         JSONObject meta = getMetadata(newFile.getUri());
-                                        //  Log.d(TAG, "Metadata: " + meta.toString());
                                         if (meta != null) {
                                             callbackContext.success(meta);
                                         } else {
                                             callbackContext.error("Failed to retrieve metadata.");
                                         }
                                     } catch (JSONException e) {
-                                        // Log.e(TAG, "Error getting metadata: " + e.getMessage());
                                         callbackContext.error("Error getting metadata: " + e.getMessage());
                                     }
                                 } else {
@@ -1097,7 +1123,6 @@ private void handleSelectFile(Uri uri) throws JSONException {
         if (traditional != null) {
             meta.put("traditionalPath", traditional);
         }
-       // Log.d(TAG, "Metadata: " + meta.toString());
         return meta;
     }
 
@@ -1225,7 +1250,6 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
             if (toRequest.isEmpty()) {
                 currentCallbackContext.success(currentPermissionsStatus);
-                //  Log.d(TAG, "currentPermissionsStatus: " + currentPermissionsStatus);
                 currentCallbackContext = null;
             } else {
                 String[] permsArray = toRequest.toArray(new String[0]);
@@ -1292,9 +1316,7 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
     }
 
-
-
-
+    
 
 
     @Override
