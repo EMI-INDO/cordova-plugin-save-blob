@@ -33,7 +33,7 @@ Checks and requests necessary Android permissions for file and media access.
 * **Description:** This method checks if the specified permissions have been granted. If not, it will request them from the user. It's crucial to call this method before performing operations that require permissions, such as `selectFiles` or `selectTargetPath`.
 * **Parameters:**
     * `options` (Object):
-        * `permissions` (Array of Strings or String): An array of permission keys (e.g., `"READ_EXTERNAL_STORAGE"`, `"WRITE_EXTERNAL_STORAGE"`, `"READ_MEDIA_IMAGES"`, `"READ_MEDIA_VIDEO"`, `"READ_MEDIA_AUDIO"`, `"RECORD_AUDIO"`, `"MODIFY_AUDIO_SETTINGS"`) or a single permission key string.
+        * `permissions` [Array of Strings or String]: An array of permission keys [e.g., `"READ_EXTERNAL_STORAGE"`, `"WRITE_EXTERNAL_STORAGE"`, `"READ_MEDIA_IMAGES"`, `"READ_MEDIA_VIDEO"`, `"READ_MEDIA_AUDIO"`, `"RECORD_AUDIO"`, `"MODIFY_AUDIO_SETTINGS"`] or a single permission key string.
 * **Response (Success):**
     * `Object`: A JSON object where keys are the full Android permission strings and values are `true` if the permission is granted, or `false` otherwise.
     * **Example:**

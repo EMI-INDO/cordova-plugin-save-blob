@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -70,7 +71,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private String pendingAction;
     private String pendingMimeType;
 
-
+    private static final int REQUEST_CODE_PICK_MEDIA = 1234;
     
     protected CordovaWebView mCordovaWebView;
 
@@ -158,17 +159,57 @@ public class CordovaSaveBlob extends CordovaPlugin {
             // Once the user has set the permissions, they can only be changed manually from the app settings.
             this.openAppSettings();
             return true;
-            
+
         } else if ("showMediaPicker".equals(action)) {
             JSONObject options = args.getJSONObject(0);
             String mediaType = options.optString("mediaType", "image");
             boolean toBase64 = options.optBoolean("toBase64", false);
             showMediaPicker(mediaType, toBase64, callbackContext);
             return true;
+
+        } else if ("openGallery".equals(action)) {
+            JSONObject options = args.getJSONObject(0);
+            String mediaType = options.optString( "mediaType", "image");
+            openGallery(mediaType);
+            return true;
         }
 
         return false;
     }
+
+
+    @SuppressLint("IntentReset")
+    private void openGallery(String mediaType) {
+        cordova.getThreadPool().execute(() -> {
+            Intent intent;
+
+            switch (mediaType) {
+                case "video":
+                    intent = new Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
+                    break;
+
+                case "audio":
+                    intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("audio/*");
+                    break;
+
+                case "pdf":
+                    intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("application/pdf");
+                    break;
+
+                case "image":
+                default:
+                    intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                    break;
+            }
+
+            cordova.setActivityResultCallback(this);
+            cordova.getActivity()
+                    .startActivityForResult(intent, REQUEST_CODE_PICK_MEDIA);
+        });
+    }
+
 
 
 
@@ -228,7 +269,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         sortOrder = MediaStore.Audio.Media.DATE_ADDED + " DESC";
                         break;
 
-                    case "pdf": 
+                    case "pdf":
                         // only permissions android.permission.MANAGE_EXTERNAL_STORAGE | or use the selectFiles method
                         uri = MediaStore.Files.getContentUri("external");
                         projection = new String[]{
@@ -244,7 +285,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         selArgs = new String[]{ "%pdf%", "%.pdf" };
                         sortOrder = MediaStore.Files.FileColumns.DATE_ADDED + " DESC";
                         break;
-                        
+
                     default:
                       //  Log.e(TAG, "Unsupported mediaType: " + mediaType);
                         callbackContext.error("Unsupported mediaType: " + mediaType);
@@ -371,7 +412,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 realPath = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA));
             }
         } catch (Exception e) {
-            Log.w(TAG, "getRealPathFromUri error: " + e.getMessage());
+           // Log.w(TAG, "getRealPathFromUri error: " + e.getMessage());
         }
         return realPath;
     }
@@ -642,7 +683,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                             || lower.endsWith(".txt")) {
                         finalPath = convertContentUriToFilePathName(uriPath);
                     }
-                    
+
                     else {
                         finalPath = convertContentUriToFilePath(uriPath);
                     }
@@ -1063,7 +1104,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
-private void handleSelectFile(Uri uri) throws JSONException {
+private void handleSelectFile(Uri uri) throws JSONException, IOException {
         JSONObject meta = getMetadata(uri);
         if (meta != null) {
             currentCallbackContext.success(meta);
@@ -1073,7 +1114,7 @@ private void handleSelectFile(Uri uri) throws JSONException {
     }
 
 
-    private JSONObject getMetadata(Uri uri) throws JSONException {
+    private JSONObject getMetadata(Uri uri) throws JSONException, IOException {
         ContentResolver cr = cordova.getActivity().getContentResolver();
         JSONObject meta = new JSONObject();
         // Query name and size via OpenableColumns
@@ -1118,11 +1159,40 @@ private void handleSelectFile(Uri uri) throws JSONException {
             }
         }
 
+
+
+            String type = cordova.getActivity().getContentResolver().getType(uri);
+            if (type != null && (type.startsWith("video/") || type.startsWith("audio/"))) {
+                MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+                mmr.setDataSource(cordova.getActivity(), uri);
+
+                String durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+                long durationMs = durationStr != null ? Long.parseLong(durationStr) : 0;
+
+                meta.put("duration", durationMs);
+
+                // Human readable mm:ss
+                int totalSec = (int) (durationMs / 1000);
+                int min = totalSec / 60;
+                int sec = totalSec % 60;
+                String humanDuration = String.format(Locale.getDefault(), "%02d:%02d", min, sec);
+                meta.put("humanDuration", humanDuration);
+
+                mmr.release();
+            }
+
+
         // Traditional filesystem path (if from primary external storage)
         String traditional = getTraditionalPath(uri);
         if (traditional != null) {
             meta.put("traditionalPath", traditional);
         }
+
+        String realPath = getRealPathFromUri(uri);
+        if (traditional == null && realPath != null) {
+            meta.put("traditionalPath", realPath);
+        }
+
         return meta;
     }
 
@@ -1316,11 +1386,11 @@ private void handleSelectFile(Uri uri) throws JSONException {
 
     }
 
-    
 
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
+
         if (resultCode != Activity.RESULT_OK || data == null) {
             currentCallbackContext.error("Selection canceled.");
             return;
@@ -1346,8 +1416,22 @@ private void handleSelectFile(Uri uri) throws JSONException {
             try {
                 if (requestCode == FILE_SELECT_CODE) {
                     handleSelectFile(uri);
+
                 } else if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
                     handleSelectTargetPath(uri);
+
+                } else if (requestCode == REQUEST_CODE_PICK_MEDIA) {
+
+                    JSONObject meta = getMetadata(uri);
+
+                    if (meta != null) {
+                        currentCallbackContext.success(meta);
+                    } else {
+                        currentCallbackContext.error("Failed to retrieve metadata.");
+                    }
+
+                } else {
+                    currentCallbackContext.error("Unknown request code: " + requestCode);
                 }
             } catch (Exception e) {
                 currentCallbackContext.error("Error processing URI: " + e.getMessage());
