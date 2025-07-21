@@ -8,6 +8,10 @@ exports.checkAndRequestPermissions = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'checkAndRequestPermissions', [options]);
 };
 
+exports.revokeManageStorage = function (success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'revokeManageStorage', []);
+};
+
 exports.selectFiles = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'selectFiles', [options]);
 };
@@ -36,10 +40,22 @@ exports.openAppSettings = function (success, error) {
     exec(success, error, 'CordovaSaveBlob', 'openAppSettings', []);
 };
 
-exports.showMediaPicker = function (options, success, error) {
-    exec(success, error, 'CordovaSaveBlob', 'showMediaPicker', [options]);
-};
-
 exports.openGallery = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'openGallery', [options]);
+};
+
+exports.clearAppOldCache = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'clearAppOldCache', [options]);
+};
+
+exports.createCategorizedFolder = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'createCategorizedFolder', [options]);
+};
+
+exports.getFileMetadata = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'getFileMetadata', [options]);
+};
+
+exports.showAudioListNative = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'showAudioListNative', [options]);
 };

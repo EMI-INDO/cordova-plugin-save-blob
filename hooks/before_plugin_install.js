@@ -8,9 +8,9 @@ module.exports = function (context) {
     let addCamera         = String(vars.IS_CAMERA_PERMISSION).toLowerCase() === 'true';
     let addReadVideo      = String(vars.IS_READ_M_VIDEO_PERMISSION).toLowerCase() === 'true';
     let addReadImages     = String(vars.IS_READ_M_IMAGES_PERMISSION).toLowerCase() === 'true';
-    let addManageStorage  = String(vars.IS_MANAGE_STORAGE_PERMISSION).toLowerCase() === 'true'; 
-   
-    if (!addCamera || !addReadVideo || !addReadImages || !addManageStorage) { 
+    let addManageStorage  = String(vars.IS_MANAGE_STORAGE_PERMISSION).toLowerCase() === 'true';
+
+    if (!addCamera || !addReadVideo || !addReadImages || !addManageStorage) {
         try {
             const androidJsonPath = path.join(
                 context.opts.projectRoot,
@@ -24,29 +24,24 @@ module.exports = function (context) {
 
                 if (!addCamera) {
                     addCamera = String(me.IS_CAMERA_PERMISSION).toLowerCase() === 'true';
-                   // console.log(`[save-blob-plugin] Fallback IS_CAMERA_PERMISSION=${addCamera}`);
                 }
                 if (!addReadVideo) {
                     addReadVideo = String(me.IS_READ_M_VIDEO_PERMISSION).toLowerCase() === 'true';
-                   // console.log(`[save-blob-plugin] Fallback IS_READ_M_VIDEO_PERMISSION=${addReadVideo}`);
                 }
                 if (!addReadImages) {
                     addReadImages = String(me.IS_READ_M_IMAGES_PERMISSION).toLowerCase() === 'true';
-                   // console.log(`[save-blob-plugin] Fallback IS_READ_M_IMAGES_PERMISSION=${addReadImages}`);
                 }
-                if (!addManageStorage) { 
+                if (!addManageStorage) {
                     addManageStorage = String(me.IS_MANAGE_STORAGE_PERMISSION).toLowerCase() === 'true';
-                   // console.log(`[save-blob-plugin] Fallback IS_MANAGE_STORAGE_PERMISSION=${addManageStorage}`);
                 }
             }
         } catch (e) {
             console.warn('[save-blob-plugin] Fallback read android.json failed:', e);
         }
     } else {
-        console.log('[save-blob-plugin] Read flags from context.opts.variables');
+       // console.log('[save-blob-plugin] Read flags from context.opts.variables');
     }
 
-   
     const manifestPath = path.join(
         context.opts.projectRoot,
         'platforms', 'android',
@@ -61,7 +56,7 @@ module.exports = function (context) {
     let xml      = fs.readFileSync(manifestPath, 'utf8');
     let modified = false;
 
-    //  Add the tools namespace if it doesn't already exist.
+    // Add the tools namespace if it doesn't already exist.
     if (!xml.includes('xmlns:tools="http://schemas.android.com/tools"')) {
         xml = xml.replace(
             /<manifest/,
@@ -76,17 +71,16 @@ module.exports = function (context) {
         { name: 'android.permission.READ_MEDIA_AUDIO' },
         { name: 'android.permission.RECORD_AUDIO' },
         { name: 'android.permission.MODIFY_AUDIO_SETTINGS' },
-        { name: 'android.permission.READ_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32"' },
+        { name: 'android.permission.READ_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32" tools:ignore="ScopedStorage"' },
         { name: 'android.permission.WRITE_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32" tools:ignore="ScopedStorage"' }
     ];
 
     // permissions based on plugin variables, requires a form when uploading the app to the play store console.
     if (addCamera)        perms.push({ name: 'android.permission.CAMERA' });
-    if (addReadVideo)     perms.push({ name: 'android.permission.READ_MEDIA_VIDEO' });
-    if (addReadImages)    perms.push({ name: 'android.permission.READ_MEDIA_IMAGES' });
-    if (addManageStorage) perms.push({ name: 'android.permission.MANAGE_EXTERNAL_STORAGE' }); 
+    if (addReadVideo)     perms.push({ name: 'android.permission.READ_MEDIA_VIDEO', attrs: 'tools:ignore="SelectedPhotoAccess"' }); // <-- PERUBAHAN DI SINI
+    if (addReadImages)    perms.push({ name: 'android.permission.READ_MEDIA_IMAGES', attrs: 'tools:ignore="SelectedPhotoAccess"' });
+    if (addManageStorage) perms.push({ name: 'android.permission.MANAGE_EXTERNAL_STORAGE', attrs: 'tools:ignore="ScopedStorage"' });
 
-   
     const toAdd = perms
         .filter(p => !xml.includes(p.name))
         .map(p => {
@@ -101,7 +95,6 @@ module.exports = function (context) {
                 + '\n' + toAdd.join('\n') + '\n'
                 + xml.slice(idx);
             modified = true;
-           // console.log('[save-blob-plugin] Added permissions:\n' + toAdd.join('\n'));
         } else {
             console.error('[save-blob-plugin] <application> tag not found');
         }
@@ -118,7 +111,6 @@ module.exports = function (context) {
         );
         xml = xml.replace(appTagMatch[0], newApp);
         modified = true;
-       // console.log('[save-blob-plugin] Added requestLegacyExternalStorage');
     }
 
     if (modified) {
@@ -128,4 +120,3 @@ module.exports = function (context) {
         console.log('[save-blob-plugin] No modifications needed');
     }
 };
-

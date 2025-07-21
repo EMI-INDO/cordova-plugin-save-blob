@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-save-blob" version="0.0.4-beta.5"
+<plugin id="cordova-plugin-save-blob" version="0.0.4-beta.6"
     xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -27,7 +27,7 @@
        <hook type="after_plugin_install" src="hooks/before_plugin_install.js" />
        <hook type="after_platform_add" src="hooks/before_plugin_install.js" />
 
-        <preference name="DOCUMENT_FILE_VERSION" default="1.0.1" />
+        <preference name="DOCUMENT_FILE_VERSION" default="1.1.0" />
 
         <framework src="androidx.documentfile:documentfile:$DOCUMENT_FILE_VERSION" />
 
