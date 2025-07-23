@@ -270,3 +270,7 @@ Some sensitive permissions will only be added if you set the following variables
 | `IS_MANAGE_STORAGE_PERMISSION=true`| `android.permission.MANAGE_EXTERNAL_STORAGE`| Highly sensitive     |
 
 The permissions listed above **require** filling out a permission declaration form when the APK/AAB is uploaded to the Google Play Console.
+
+
+## Documentation will change slightly in the stable release v0.0.4
+## At least 6 new actions will be in the stable release v0.0.4

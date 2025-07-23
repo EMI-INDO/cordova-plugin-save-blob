@@ -59,3 +59,7 @@ exports.getFileMetadata = function (options, success, error) {
 exports.showAudioListNative = function (options, success, error) {
     exec(success, error, 'CordovaSaveBlob', 'showAudioListNative', [options]);
 };
+
+exports.uploadFile = function (options, success, error) {
+    exec(success, error, 'CordovaSaveBlob', 'uploadFile', [options]);
+};
