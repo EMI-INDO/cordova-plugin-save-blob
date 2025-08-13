@@ -17,6 +17,7 @@ A Cordova plugin for Android that provides functionalities to interact with the 
 cordova plugin add cordova-plugin-save-blob
 ```
 
+- Addon for construct 3 https://www.construct.net/en/make-games/addons/1452/document-file
 
 ---
 
@@ -26,9 +27,401 @@ The plugin exposes the following methods via `cordova.plugin.CordovaSaveBlob.<Me
 
 ---
 
-### `checkAndRequestPermissions(options)`
+
+## new api cordova-plugin-save-blob@0.0.4  (12 new methods)
+
+---
+- To ensure that the filePath LegacyExternalStorage (traditionalPath) continues to function on modern devices, whether the file source is from an SD card or USB OTG, use the copyFileToCache method.
+- NOTE: The copyFileToCache method or any method with the isCopyFileToCache parameter set to true will use shared storage on the user's device. To clear the cache, use the clearAppOldCache method after the manipulation process is complete.
+- The response.cachedPath URI can be used without any permission restrictions, e.g., uploading to Google Drive or your own hosting.
+
+---
+- v0.0.4 No description yet; I will create it when I have free time.
+- This plugin works fully from Android 10 to Android 16, 
+- 14 tests per release, until stable release.
+
+<details>
+<summary>View code example v0.0.4</summary>
+<pre> 
+
+/*
+Is the uri selectTargetPath permission still valid? 
+Note: On Android 14 or higher, if the user sets limited permissions after the device is rebooted, the limited permissions will no longer apply.
+*/
+```
+cordova.plugin.CordovaSaveBlob.hasPersistedPermission(function (response) {
+    const isUri = response.hasPermission;
+    // permission still valid? 
+    if (isUri) {
+
+        console.log("still valid: " +response.uri);
+
+    } else {
+        console.log("No longer valid: " + JSON.stringify(response));
+        
+    }
+}, function (error) {
+    console.error(`${error}`);
+});
+
+```
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+
+```
+
+/*
+0 = now
+24 = 24 hours  
+7 = 7 days  
+30 = 30 days
+90 = 90 days
+*/
+
+const time = 0;
+let setTime = time === 0 ? 0 : time === 1 ? 24 : time === 2 ? 7 : time === 3 ? 30 : time === 4 ? 90 : 0;
+
+cordova.plugin.CordovaSaveBlob.clearAppOldCache({
+    setTime: setTime
+}, function (response) {
+}, function (error) {
+    console.error(`${error}`);
+});
+
+
+```
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+// Native UI 
+// image | video | else request MANAGE_EXTERNAL_STORAGE
+
+cordova.plugin.CordovaSaveBlob.openGallery({
+    mediaType: "image",
+    isCreateBase64: false
+}, function (response) {
+    
+    console.log("Metadata: " + JSON.stringify(response));
+    
+    /*
+    response.name || "";
+    response.mimeType || "";
+    response.base64 || "";
+    response.uri || "";
+    response.traditionalPath || "";
+    response.cachedPath || "";
+    response.size || 0;
+    response.sizeReadable || "";
+
+    ////////////////
+    response.duration || 0;        // If mime video
+    response.humanDuration || "";  // If mime video
+    response.width || 0;           // if mime image
+    response.height || 0;          // if mime image
+    */
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+
+```
+
+
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+// https://www.thoughtco.com/audio-file-mime-types-3469485
+
+cordova.plugin.CordovaSaveBlob.showAudioListNative({
+    audioMimeType: "audio/mpeg", // mp3   
+    isFilter: false, // If true, folderPath = uri selectTargetPath
+    folderPath: "",
+    overlayBgColor: "black",
+    separatorItemColor: "white"
+}, (item) => {
+
+    console.log("item click: " + JSON.stringify(item));
+    
+    /*
+    item.name || "";
+    item.uri || "";
+    item.traditionalPath || "";
+    item.humanDuration || "";
+    item.sizeReadable || "";
+    */
+
+}, (error) => {
+    console.error(`${error}`);
+});
+
+```
+
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+cordova.plugin.CordovaSaveBlob.getFileMetadata({
+    filePath: "SAF or response.cachedPath",
+    isCreateBase64: false
+}, function (response) {
+
+    console.log("Metadata: " + JSON.stringify(response));
+ 
+    /*
+    response.name || "";
+    response.mimeType || "";
+    response.base64 || "";
+    response.uri || "";
+    response.traditionalPath || "";
+    response.cachedPath || "";
+    response.size || 0;
+    response.sizeReadable || "";
+
+    ////////////////
+    response.duration || 0;        // If mime video | audio
+    response.humanDuration || "";  // If mime video | audio
+    response.width || 0;           // if mime image
+    response.height || 0;          // if mime image
+    */
+
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+```
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+// support traditionalPath Example /storage/emulated/0/Music/mySong.mp3
+
+cordova.plugin.CordovaSaveBlob.copyFileToCache({ uriPath: "SAF | response.cachedPath" }, function (response) {
+    
+    console.log("Metadata: " + JSON.stringify(response));
+    
+    /*
+    response.name || "";
+    response.mimeType || "";
+    response.base64 || "";
+    response.uri || "";
+    response.traditionalPath || "";
+    response.cachedPath || "";
+    response.size || 0;
+    response.sizeReadable || "";
+
+    ////////////////
+    response.duration || 0;        // If mime video | audio
+    response.humanDuration || "";  // If mime video | audio
+    response.width || 0;           // if mime image
+    response.height || 0;          // if mime image
+    */
+
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+```
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+const category = 4;
+let terget = category === 0 ? "pictures" : category === 1 ? "music" : category === 2 ? "movies" : category === 3 ? "dcim" : category === 4 ? "documents" : "download";
+
+cordova.plugin.CordovaSaveBlob.createCategorizedFolder({
+    category: terget,
+    folderName: "MyAppName"
+}, function (response) {
+
+    console.log("Metadata: " + JSON.stringify(response));
+
+   // response.uriPath || "";
+   // response.traditionalPath || "";
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+
+```
+
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+```
+
+cordova.plugin.CordovaSaveBlob.checkAndroidVersion(function (response) {
+    switch (response) {
+        case ">=14":
+            // READ_MEDIA_AUDIO true
+            // READ_MEDIA_VIDEO true
+            // READ_MEDIA_IMAGES true
+           
+            break;
+        case "13":
+            // READ_MEDIA_AUDIO true
+            // READ_MEDIA_VIDEO true
+            // READ_MEDIA_IMAGES true
+
+            break;
+        case "12":
+            // READ_MEDIA_AUDIO true
+            // READ_MEDIA_VIDEO true
+            // READ_MEDIA_IMAGES true
+            // READ_EXTERNAL_STORAGE true
+
+            break;
+        case "11":
+            // READ_EXTERNAL_STORAGE true
+
+            break;
+        case "<=10":
+            // READ_EXTERNAL_STORAGE true
+            // WRITE_EXTERNAL_STORAGE true
+
+            break;
+
+    }
+
+}, function (error) {
+
+});
+
+```
+
+
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+cordova.plugin.CordovaSaveBlob.uploadFile(); // PHP https://github.com/EMI-INDO/cordova-plugin-save-blob/discussions/2
+
+```
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+```
+// txt | json | js | html | and others
+
+let finalNewFileName = "note_" + new Date().getTime();
+
+cordova.plugin.CordovaSaveBlob.createNewFile({
+    outputPath: "selectTargetPath",
+    fileName: finalNewFileName,
+    fileExtension: "txt",
+    content: "Hello world"
+},
+    function (response) {
+
+        console.log("Metadata: " + JSON.stringify(response));
+
+       // response.fileUri;
+       // response.fileName;
+  
+
+    }, function (error) {
+        console.error(`${error}`);
+
+    });
+```
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+    cordova.plugin.CordovaSaveBlob.loadFileContent({
+        filePath: "SAF"
+    },
+        function (content) {
+            console.log("content: " + JSON.stringify(content))
+        }, function (error) {
+            console.error(`${error}`);
+
+        });
+
+```
+
+
+///////////////////////////////
+///////////////////////////////
+///////////////////////////////
+
+
+```
+
+         cordova.plugin.CordovaSaveBlob.saveFile({
+            filePath: "SAF",
+            content: "New hello world"
+        },
+        function (content) {
+            console.log("content: " + JSON.stringify(content))
+        }, function (error) {
+            console.error(`${error}`);
+
+        });
+
+```
+
+</pre>
+</details>
+
+---
+
+
+## `checkAndRequestPermissions(options)`
 
 Checks and requests necessary Android permissions for file and media access.
+
+<details>
+<summary>View description</summary>
+
 
 * **Description:** This method checks if the specified permissions have been granted. If not, it will request them from the user. It's crucial to call this method before performing operations that require permissions, such as `selectFiles` or `selectTargetPath`.
 * **Parameters:**
@@ -48,9 +441,118 @@ Checks and requests necessary Android permissions for file and media access.
 
 ---
 
-### `selectFiles(options)`
+</details>
+
+
+
+
+<details>
+<summary>View code example</summary>
+<pre> 
+// Recommended cordova.plugin.CordovaSaveBlob.checkAndroidVersion();
+   
+// ["CAMERA", "READ_MEDIA_AUDIO", "READ_MEDIA_VIDEO", "READ_MEDIA_IMAGES", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS", "MANAGE_EXTERNAL_STORAGE"];
+
+```
+let permissionsData = ["CAMERA", "READ_MEDIA_AUDIO", "READ_MEDIA_VIDEO", "READ_MEDIA_IMAGES", "READ_EXTERNAL_STORAGE"];
+
+cordova.plugin.CordovaSaveBlob.checkAndRequestPermissions({
+    permissions: permissionsData
+}, (result) => {
+
+    let permissionsStatus = {};
+    for (const permissionName in result) {
+        if (Object.prototype.hasOwnProperty.call(result, permissionName)) {
+            permissionsStatus[permissionName] = !!result[permissionName];
+        }
+    }
+
+    const isCamera = permissionsStatus["android.permission.CAMERA"] || false;
+    const isReadMediaAudio = permissionsStatus["android.permission.READ_MEDIA_AUDIO"] || false;                // Android 13, 14, 15, 16 or newer
+    const isReadMediaVideo = permissionsStatus["android.permission.READ_MEDIA_VIDEO"] || false;                // Android 13, 14, 15, 16 or newer
+    const isReadMediaImages = permissionsStatus["android.permission.READ_MEDIA_IMAGES"] || false;              // Android 13, 14, 15, 16 or newer
+    const isReadExternalStorage = permissionsStatus["android.permission.READ_EXTERNAL_STORAGE"] || false;      // Android 10, 11, 12 
+    const isWriteExternalStorage = permissionsStatus["android.permission.WRITE_EXTERNAL_STORAGE"] || false;    // Android 10 or older
+    const isRecordAudio = permissionsStatus["android.permission.RECORD_AUDIO"] || false;
+    const isModifyAudioSetting = permissionsStatus["android.permission.MODIFY_AUDIO_SETTINGS"] || false;
+    const isManageExternalStorage = permissionsStatus["android.permission.MANAGE_EXTERNAL_STORAGE"] || false;  // Android 12 or newer
+
+
+    console.log("isCamera: " + isCamera);
+    console.log("isReadMediaAudio: " + isReadMediaAudio);
+    console.log("isReadMediaVideo: " + isReadMediaVideo);
+    console.log("isReadMediaImages: " + isReadMediaImages);
+    console.log("isReadExternalStorage: " + isReadExternalStorage);
+    console.log("isWriteExternalStorage: " + isWriteExternalStorage);
+    console.log("isRecordAudio: " + isRecordAudio);
+    console.log("isModifyAudioSetting: " + isModifyAudioSetting);
+    console.log("isManageExternalStorage: " + isManageExternalStorage);
+   // console.log("result: " + JSON.stringify(result));
+  
+}, (err) => {
+    
+    console.error(`${err}`);
+    
+});
+```
+
+
+
+<li>checkAndroidVersion:</li></ul>
+<pre> 
+
+```
+cordova.plugin.CordovaSaveBlob.checkAndroidVersion(function (response) {
+    switch (response) {
+        case ">=14":
+            // READ_MEDIA_AUDIO true
+            // READ_MEDIA_VIDEO true
+            // READ_MEDIA_IMAGES true
+           
+            break;
+        case "13":
+            // READ_MEDIA_AUDIO true
+            // READ_MEDIA_VIDEO true
+            // READ_MEDIA_IMAGES true
+
+            break;
+        case "12":
+            // READ_MEDIA_AUDIO true
+            // READ_MEDIA_VIDEO true
+            // READ_MEDIA_IMAGES true
+            // READ_EXTERNAL_STORAGE true
+
+            break;
+        case "11":
+            // READ_EXTERNAL_STORAGE true
+
+            break;
+        case "<=10":
+            // READ_EXTERNAL_STORAGE true
+            // WRITE_EXTERNAL_STORAGE true
+
+            break;
+
+    }
+
+}, function (error) {
+
+});
+```
+
+</pre>
+</details>
+
+
+
+
+## `selectFiles(options)`
 
 Opens a file picker to allow the user to select one or more files.
+
+<details>
+<summary>View description</summary>
+
 
 * **Description:** This method launches the Android system's file picker, enabling the user to select a file. Once a file is chosen, its metadata (including its URI, name, size, MIME type, and optionally Base64 data) will be returned. **The Base64 data is primarily intended for direct rendering in HTML elements (e.g., `<img>`, `<audio>`, `<video>`) or for in-memory processing within your app.**
 * **Parameters:**
@@ -72,20 +574,54 @@ Opens a file picker to allow the user to select one or more files.
 
 ---
 
-### `registerWebRTC()`
+</details>
 
-Registers a `WebChromeClient` to handle WebRTC permission requests.
 
-* **Description:** This method is specifically designed for Android 14+ and ensures that WebRTC media permissions (such as camera and microphone access) are automatically granted when requested by the WebView. This is very helpful for enabling WebRTC functionalities within your Cordova app without manual user intervention.
-* **Parameters:** None.
-* **Response (Success):** None (Void).
-* **Response (Error):** None.
 
----
+<details>
+<summary>View code example</summary>
+<pre> 
 
-### `selectTargetPath()`
+ ```
+cordova.plugin.CordovaSaveBlob.selectFiles({
+    mime: "audio/*",
+    isCopyFileToCache: false, // true response.cachedPath
+    isBase64: false           // true  response.base64
+}, function (response) {
+
+    console.log("response: " + JSON.stringify(response));
+
+    response.name || "";
+    response.mimeType || "";
+    response.base64 || "";
+    response.uri || "";
+    response.traditionalPath || "";
+    response.cachedPath || "";
+    response.size || 0;
+    response.sizeReadable || "";
+
+    ////////////////
+    response.duration || 0;        // If mime video | audio
+    response.humanDuration || "";  // If mime video | audio
+    response.width || 0;           // if mime image
+    response.height || 0;          // if mime image
+
+}, function (error) {
+    console.error(`${error}`);
+});
+```
+
+</pre>
+</details>
+
+
+
+## `selectTargetPath()`
 
 Opens a directory picker to allow the user to select a target directory for saving files using the Storage Access Framework (SAF).
+
+<details>
+<summary>View description</summary>
 
 * **Description:** This method leverages Android's Storage Access Framework (SAF) to let the user pick a folder. Once a folder is selected, your app will be granted persistent permissions to read and write within that folder, which is crucial for file management on Android 10+ where direct file system access has become more restricted.
 * **Parameters:** None.
@@ -98,8 +634,47 @@ Opens a directory picker to allow the user to select a target directory for savi
 
 ---
 
-### `conversionSAFUri(uriPath)`
+</details>
 
+
+<details>
+<summary>View code example</summary>
+<pre> 
+
+ ```
+
+cordova.plugin.CordovaSaveBlob.selectTargetPath({
+    customNewFolder: "MyAppName", // a new folder will be created inside the folder selected by the user (default "")
+}, function (response) {
+    
+    console.log("response: " + JSON.stringify(response));
+
+    /*
+    response.uri || "";             // base SAF
+    response.uriCustom || "";       // SAF  If customNewFolder: is specified, not ""
+    response.uriCustomPath || "";   // displayPath UI  If customNewFolder: is specified, not ""  ( Example Music/MyAppName )
+    response.traditionalPath || ""; // Example /storage/emulated/0/Music/MyAppName
+    */
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+
+```
+
+</pre>
+</details>
+
+
+
+
+### `conversionSAFUri(uriPath)`
+no longer used, replaced with copyFileToCache
+
+<details>
+<summary>View description</summary>
+   
 Converts a content URI (SAF) or an internal data URI to a traditional file system path.
 
 * **Description:** This method attempts to resolve a given URI, which can be either a SAF URI (`content://...`) or an internal app data URI (`/data/user/0/...`), into its corresponding traditional, directly accessible file system path (e.g., `/storage/emulated/0/Music/song.mp3`). This is particularly useful for scenarios where other plugins or native APIs require an absolute file path rather than a content URI.
@@ -112,9 +687,17 @@ Converts a content URI (SAF) or an internal data URI to a traditional file syste
 
 ---
 
-### `downloadBlob(options)`
+</details>
+
+
+## `downloadBlob(options)`
 
 Saves Base64 encoded data as a file on the device.
+
+
+<details>
+<summary>View description</summary>
+
 
 * **Description:** This method takes a raw Base64 string and saves it as a file on the device. You have the option to specify a target directory using a previously selected SAF URI, or you can let the plugin save it to the device's default Downloads folder.
 * **Parameters:**
@@ -138,9 +721,66 @@ Saves Base64 encoded data as a file on the device.
 
 ---
 
+</details>
+
+
+<details>
+<summary>View code example</summary>
+<pre> 
+
+   
+```
+const base64Data = "data:image/png;base64, iVBORw0KGgoA......"; // example
+const format = 2; // example png
+let mimeType = format === 0 ? "mp3" : format === 1 ? "wav" : format === 2 ? "png" : format === 3 ? "jpg" : "mp4";
+let finalFileName = "image_" + new Date().getTime();
+const base64 = base64Data.replace(/^data:.*;base64,/, '');
+
+cordova.plugin.CordovaSaveBlob.downloadBlob({
+    saveToPath: "base SAF uri or customNewFolder",
+    base64Data: base64,
+    fileName: finalFileName,
+    format: mimeType,
+    isBase64: isSaveCreateBase64
+}, function (response) {
+    
+    console.log("response: " + JSON.stringify(response));
+    /*
+    response.name || "";
+    response.mimeType || "";
+    response.base64 || "";
+    response.uri || "";
+    response.traditionalPath || "";
+    response.cachedPath || "";
+    response.size || 0;
+    response.sizeReadable || "";
+
+    ////////////////
+    response.duration || 0;        // If mime video | audio
+    response.humanDuration || "";  // If mime video | audio
+    response.width || 0;           // if mime image
+    response.height || 0;          // if mime image
+    */
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+```
+
+</pre>
+</details>
+
+
+
+
 ### `downloadFile(options)`
 
 Downloads a file from a remote URL and saves it to the device.
+
+
+<details>
+<summary>View description</summary>
 
 * **Description:** This method fetches a file from a given URL. You can choose to save the file to a specific directory (using a SAF URI) or to the default Downloads folder. The plugin also provides progress updates during the download. If `isBase64` is `true`, the file content will be returned as Base64 for **direct app/HTML usage** without local storage.
 * **Parameters:**
@@ -167,10 +807,68 @@ Downloads a file from a remote URL and saves it to the device.
 
 ---
 
-### `fileToBase64(options)`
+</details>
+
+
+
+<details>
+<summary>View code example</summary>
+<pre> 
+
+
+```
+
+
+let finalFilesName = "image_" + new Date().getTime();
+
+cordova.plugin.CordovaSaveBlob.downloadFile({
+    fileUrl: "url file",
+    isBase64: false,
+    saveToPath: "target path",
+    fileName: finalFilesName
+}, function (response) {
+    self._Tags = tag;
+    if (typeof response === "number") {
+
+        console.log('Progress: ' + response + '%'); // send/update to UI
+    }
+    else {
+        /*
+    response.name || "";
+    response.mimeType || "";
+    response.base64 || "";
+    response.uri || "";
+    response.traditionalPath || "";
+    response.cachedPath || "";
+    response.size || 0;
+    response.sizeReadable || "";
+
+    ////////////////
+    response.duration || 0;        // If mime video | audio
+    response.humanDuration || "";  // If mime video | audio
+    response.width || 0;           // if mime image
+    response.height || 0;          // if mime image
+    */
+    }
+
+}, function (error) {
+    console.error(`${error}`);
+});
+
+```
+
+</pre>
+</details>
+
+
+## `fileToBase64(options)`
 
 Converts a local file (specified by its path or URI) to a Base64 encoded string.
 
+<details>
+<summary>View description</summary>
+
+   
 * **Description:** This method reads the content of a file from the provided `filePath` (which can be a `content://` URI, a `file://` URI, or a traditional file system path) and encodes it into a **Base64 string**. The primary use case for this is to allow the file's content to be directly used in HTML elements (e.g., `<img>`, `<audio>`, `<video>`) or for in-memory processing within your app.
 * **Parameters:**
     * `options` (Object):
@@ -190,9 +888,37 @@ Converts a local file (specified by its path or URI) to a Base64 encoded string.
 
 ---
 
-### `openAppSettings()`
+</details>
+
+
+
+<details>
+<summary>View code example</summary>
+<pre> 
+
+```
+cordova.plugin.CordovaSaveBlob.fileToBase64({
+    filePath: "uri file path"
+}, function (response) {
+  
+    console.log(response.base64);
+
+}, function (error) {
+    console.error(`${error}`);
+});
+```
+
+</pre>
+</details>
+
+
+
+## `openAppSettings()`
 
 Opens the application's detailed settings page on Android.
+
+<details>
+<summary>View description</summary>
 
 * **Description:** This method provides a shortcut for users to directly access your app's detailed settings screen where they can manually adjust app permissions, manage storage usage, or modify other settings if needed (e.g., after an initial permission denial).
 * **Parameters:** None.
@@ -202,8 +928,31 @@ Opens the application's detailed settings page on Android.
 
 ---
 
+</details>
+
+```
+cordova.plugin.CordovaSaveBlob.openAppSettings();
+```
 
 
+
+
+
+### `registerWebRTC()`
+
+Registers a `WebChromeClient` to handle WebRTC permission requests.
+
+<details>
+<summary>View description</summary>
+   
+* **Description:** This method is specifically designed for Android 14+ and ensures that WebRTC media permissions (such as camera and microphone access) are automatically granted when requested by the WebView. This is very helpful for enabling WebRTC functionalities within your Cordova app without manual user intervention.
+* **Parameters:** None.
+* **Response (Success):** None (Void).
+* **Response (Error):** None.
+
+---
+
+</details>
 
 
 
@@ -232,8 +981,11 @@ Run the following command to add the plugin to your Cordova project:
 cordova plugin add cordova-plugin-save-blob \
   --save \
   --variable IS_CAMERA_PERMISSION=true \
+  --variable IS_READ_M_AUDIO_PERMISSION=false \
   --variable IS_READ_M_VIDEO_PERMISSION=false \
   --variable IS_READ_M_IMAGES_PERMISSION=false \
+  --variable IS_RECORD_AUDIO_PERMISSION=false \
+  --variable IS_MODIFY_AUDIO_SET_PERMISSION=false \
   --variable IS_MANAGE_STORAGE_PERMISSION=false
 ```
 
@@ -271,6 +1023,3 @@ Some sensitive permissions will only be added if you set the following variables
 
 The permissions listed above **require** filling out a permission declaration form when the APK/AAB is uploaded to the Google Play Console.
 
-
-## Documentation will change slightly in the stable release v0.0.4
-## At least 6 new actions will be in the stable release v0.0.4

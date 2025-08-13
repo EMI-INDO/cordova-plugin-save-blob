@@ -10,6 +10,8 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.UriPermission;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -63,6 +65,8 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -87,13 +91,17 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     private static final String TAG = "CordovaSaveBlob";
 
+    private static final String PREFS_NAME = "PathPermissionsPrefs";
+    private static final String KEY_TARGET_PATH_URI = "targetPathUri";
 
-    private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1; // action: selectFile
+    private static final int REQUEST_CODE_OPEN_DOCUMENT_TREE = 1; // action: selectFolder
     private static final int FILE_SELECT_CODE = 2; // action: selectFile
     private static final int PERMISSION_REQUEST_CODE = 3; // action: checkAndRequestPermissions
 
     private static final int REQUEST_CODE_PICK_MEDIA = 1234; // action: showAudioListNative
     private static final int MANAGE_STORAGE_REQUEST_CODE = 301; // action: checkAndRequestPermissions
+
+    private String globalCustomNewFolderName;
 
     private JSONObject currentPermissionsStatus;
     private CallbackContext currentCallbackContext = null;
@@ -110,8 +118,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
     // Video/Audio/PDF: maxSize 20mb, if (file size 20mb+) apk crash or out of memory
     // handle with if(parseFloat(sizeReadable) <20)
     private Boolean isCreateBase64 = false;
-    private Boolean isSaveCreateBase64 = false;
-    private Boolean isFileCreateBase64 = false;
 
     // Audio list Native UI
     private FrameLayout listContainer;
@@ -121,7 +127,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     private final java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(4);
     private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    
+
     private static class SongInfo {
         public final String title;
         public final String artist;
@@ -162,7 +168,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 permissionsArr.put(perm);
             }
 
-                this.checkAndRequestPermissions(permissionsArr);
+            this.checkAndRequestPermissions(permissionsArr);
 
             return true;
 
@@ -170,8 +176,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
             // new action: plugin v0.0.4
             this.openManageStorageSettings();
             return true;
-        }
-        else if (action.equals("selectFiles")) {
+
+        } else if (action.equals("selectFiles")) {
             JSONObject options = args.getJSONObject(0);
             String mimeType = options.optString("mime");
             this.isCreateBase64 = options.optBoolean("isBase64", false); // direct response render in html element
@@ -189,14 +195,31 @@ public class CordovaSaveBlob extends CordovaPlugin {
             return true;
 
         } else if ("selectTargetPath".equals(action)) {
+            JSONObject options = args.getJSONObject(0);
+            globalCustomNewFolderName = options.optString("customNewFolder", "");
             this.openDocumentTree();
             return true;
 
-        } else if ("conversionSAFUri".equals(action)) {
+        } else if ("hasPersistedPermission".equals(action)) {
+            // ("selectTargetPath) After the device is reloaded, is the permission still valid?
+            this.checkPersistedPermission(callbackContext);
+            return true;
+
+        } else if ("checkAndroidVersion".equals(action)) {
+            // new action: plugin v0.0.4
+            cordova.getThreadPool().execute(() -> {
+                this.checkAndroidVersion(callbackContext);
+            });
+            return true;
+
+        } else if ("copyFileToCache".equals(action)) {
             JSONObject options = args.getJSONObject(0);
             String uriPath = options.optString("uriPath");
-            this.copyFileAndGetMetadata(uriPath, callbackContext);
-           // this.conversionSAFUri(uriPath, callbackContext);
+            cordova.getThreadPool().execute(() -> {
+                this.copyFileAndGetMetadata(uriPath, callbackContext);
+            });
+
+            // this.conversionSAFUri(uriPath, callbackContext);
             return true;
 
         } else if ("downloadBlob".equals(action)) {
@@ -222,7 +245,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
         } else if (action.equals("uploadFile")) {
             // new action: plugin v0.0.4
             JSONObject options = args.getJSONObject(0);
-            String serverUrl = options.optString("serverUrl", "");
+            String serverUrl = options.optString("serverUrl", ""); // 
             String fileUriStr = options.optString("fileUri", "");
             String userId = options.optString("userId", "");
             String baseFileName = options.optString("fileName", "file");
@@ -249,7 +272,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
         } else if (action.equals("openAppSettings")) {
             // Once the user has set the permissions, they can only be changed manually from the app settings.
-            this.openAppSettings();
+                this.openAppSettings();
             return true;
 
         } else if ("openGallery".equals(action)) {
@@ -266,8 +289,10 @@ public class CordovaSaveBlob extends CordovaPlugin {
             // new action: plugin v0.0.4
             // selectFile action: will use a lot of storage, for example selectFile video: 500mb, so use action: clearAppOldCache.
             JSONObject options = args.getJSONObject(0);
-            int setTime = options.optInt("setTime", 24); // default 24
-            clearAppOldCache(setTime);
+            int setTime = options.optInt("setTime", 0); // default 0
+            cordova.getThreadPool().execute(() -> {
+                clearAppOldCache(setTime);
+            });
             return true;
 
         } else if ("createCategorizedFolder".equals(action)) {
@@ -279,10 +304,10 @@ public class CordovaSaveBlob extends CordovaPlugin {
             this.pendingFolderName = folderName;
 
             cordova.getThreadPool().execute(() -> {
-                    createCategorizedFolder(category, folderName, callbackContext);
+                createCategorizedFolder(category, folderName, callbackContext);
             });
             return true;
-            
+
         } else if (action.equals("showAudioListNative")) {
             // new action: plugin v0.0.4
             // Native UI
@@ -302,27 +327,72 @@ public class CordovaSaveBlob extends CordovaPlugin {
         } else if ("getFileMetadata".equals(action)) {
             // new action: plugin v0.0.4
             JSONObject options = args.optJSONObject(0);
-            if (options == null) {
-                callbackContext.error("Options must be provided.");
-                return false;
-            }
             String filePath = options.optString("filePath");
             this.isCreateBase64 = options.optBoolean("isCreateBase64", false);
 
-            if (filePath == null || filePath.isEmpty()) {
-                callbackContext.error("filePath cannot be null or empty.");
-                return false;
-            }
             cordova.getThreadPool().execute(() -> {
                 getFileMetadata(filePath, callbackContext);
             });
 
             return true;
 
+        } else if ("loadFileContent".equals(action)) {
+            // new action: plugin v0.0.4
+            try {
+                JSONObject options = args.getJSONObject(0);
+                String fileUri = options.getString("filePath");
+                cordova.getThreadPool().execute(() -> {
+                    this.loadFileContent(fileUri, callbackContext);
+                });
+            } catch (JSONException e) {
+                callbackContext.error("Invalid JSON arguments for loadFileContent: " + e.getMessage());
+            }
+            return true;
+
+        } else if ("createNewFile".equals(action)) {
+            // new action: plugin v0.0.4
+            try {
+                JSONObject options = args.getJSONObject(0);
+                String outputPath = options.getString("outputPath");
+                String fileName = options.getString("fileName");
+                String fileExtension = options.getString("fileExtension"); // .txt | .json | .js etc.
+                String content = options.getString("content");
+
+                cordova.getThreadPool().execute(() -> {
+                    this.createNewFile(outputPath, fileName, fileExtension, content, callbackContext);
+                });
+
+            } catch (JSONException e) {
+                callbackContext.error("Invalid JSON arguments for createNewFile: " + e.getMessage());
+            }
+            return true;
+
+        } else if ("saveFileContent".equals(action)) {
+            // new action: plugin v0.0.4
+            try {
+                JSONObject options = args.getJSONObject(0);
+                String fileUri = options.getString("filePath");
+                String content = options.getString("content");
+
+                cordova.getThreadPool().execute(() -> {
+                    this.saveFileContent(fileUri, content, callbackContext);
+                });
+
+            } catch (JSONException e) {
+                callbackContext.error("Invalid JSON arguments: " + e.getMessage());
+            }
+            return true;
+
         }
 
         return false;
     }
+
+
+
+
+
+
 
 
 
@@ -489,10 +559,13 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         songData.put("uri", song.uriPath);
                         songData.put("traditionalPath", song.itemPath);
                         songData.put("humanDuration", formatDuration(song.duration));
-                        songData.put("sizeReadable", formatSize(song.size));
+                        songData.put("sizeReadable", getReadableSize(song.size));
+
                         PluginResult result = new PluginResult(PluginResult.Status.OK, songData);
+
                         result.setKeepCallback(true);
                         this.currentCallbackContext.sendPluginResult(result);
+                       // Log.d(TAG, "Song selected: " + songData);
                         cleanupAudioListUI(true);
                     } catch (Exception e) {
                         // Log.e(TAG, "Failed to generate JSON", e);
@@ -542,7 +615,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
             ImageButton btnClose = new ImageButton(context);
             int buttonSize = (int) (48 * density);
             btnClose.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-            btnClose.setBackgroundColor(Color.TRANSPARENT);
+            btnClose.setBackgroundColor(Color.WHITE);
+            btnClose.setColorFilter(Color.RED);
             FrameLayout.LayoutParams closeLp = new FrameLayout.LayoutParams(buttonSize, buttonSize, Gravity.END | Gravity.TOP);
             btnClose.setOnClickListener(v -> cleanupAudioListUI(true));
 
@@ -556,7 +630,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
             this.currentCallbackContext.sendPluginResult(result);
 
         } catch (Exception e) {
-            // Log.e(TAG, "Failed to build UI", e);
             if (this.currentCallbackContext != null) {
                 this.currentCallbackContext.error("Failed to build UI: " + e.getMessage());
             }
@@ -581,7 +654,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     artwork = context.getContentResolver().loadThumbnail(uri, new Size(100, 100), null);
                 }
             } catch (Exception e) {
-             // Leave artwork null if there is an error (for example, file not found)
+                // Leave artwork null if there is an error (for example, file not found)
             }
 
             final Bitmap finalArtwork = artwork;
@@ -607,14 +680,6 @@ public class CordovaSaveBlob extends CordovaPlugin {
         return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds);
     }
 
-    private static String formatSize(long size) {
-        if (size <= 0) {
-            return "0 B";
-        }
-        final String[] units = new String[] { "B", "KB", "MB", "GB", "TB" };
-        int digitGroups = (int) (Math.log10(size) / Math.log10(1024));
-        return new DecimalFormat("#,##0.#").format(size / Math.pow(1024, digitGroups)) + " " + units[digitGroups];
-    }
 
 
     private void cleanupAudioListUI(boolean closeCallback) {
@@ -653,8 +718,11 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 case "documents":
                     publicDirectory = Environment.DIRECTORY_DOCUMENTS;
                     break;
+                case "download":
+                    publicDirectory = Environment.DIRECTORY_DOWNLOADS;
+                    break;
                 default:
-                    callbackContext.error("Invalid category specified. Use 'music', 'movies', 'pictures', 'dcim', or 'documents'.");
+                    callbackContext.error("Invalid category specified. Use 'music', 'movies', 'pictures', 'dcim', 'documents', or 'download'.");
                     return;
             }
 
@@ -664,6 +732,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 Uri collectionUri = getCollectionUri(category.toLowerCase());
 
                 if (collectionUri == null) {
+                   // Log.d(TAG,"Could not resolve MediaStore collection for category: " + category);
                     callbackContext.error("Could not resolve MediaStore collection for category: " + category);
                     return;
                 }
@@ -676,7 +745,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 try {
                     itemUri = resolver.insert(collectionUri, values);
                 } catch (Exception e) {
-                   // Log.e(TAG, "MediaStore insert failed, folder might already exist or another error occurred.", e);
+                    // Log.e(TAG, "MediaStore insert failed, folder might already exist or another error occurred.", e);
                 }
 
                 File dir = Environment.getExternalStoragePublicDirectory(publicDirectory);
@@ -687,6 +756,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     String uriPathString = (itemUri != null) ? itemUri.toString() : "N/A (folder likely pre-existed)";
                     sendSuccessResponse(uriPathString, traditionalPath, callbackContext);
                 } else {
+                  //  Log.d(TAG,"Failed to create folder using MediaStore and folder does not exist.");
                     callbackContext.error("Failed to create folder using MediaStore and folder does not exist.");
                 }
 
@@ -694,7 +764,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 // LEGACY APPROACH: Android 9 (API 28) and below
                 File dir = Environment.getExternalStoragePublicDirectory(publicDirectory);
                 if (dir == null) {
-                   // Log.d(TAG,"Public directory is null: " + publicDirectory);
+                   //  Log.d(TAG,"Public directory is null: " + publicDirectory);
                     callbackContext.error("Public directory is null: " + publicDirectory);
                     return;
                 }
@@ -706,10 +776,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     String uriPath = Uri.fromFile(finalFolder).toString();
                     sendSuccessResponse(uriPath, traditionalPath, callbackContext);
                 } else {
+                   // Log.d(TAG,"Failed to create folder using legacy method. Check permissions.");
                     callbackContext.error("Failed to create folder using legacy method. Check permissions.");
                 }
             }
         } catch (Exception e) {
+           // Log.e(TAG,"An unexpected error occurred: " + e.getMessage());
             callbackContext.error("An unexpected error occurred: " + e.getMessage());
         }
     }
@@ -720,15 +792,18 @@ public class CordovaSaveBlob extends CordovaPlugin {
     private void sendSuccessResponse(String uriPath, String traditionalPath, CallbackContext callbackContext) {
         try {
             JSONObject result = new JSONObject();
+
             result.put("uriPath", uriPath); // SAF
             result.put("traditionalPath", traditionalPath);
+           // Log.d(TAG,"sendSuccessResponse: " + result);
             callbackContext.success(result);
         } catch (JSONException e) {
+          //  Log.e(TAG,"Failed to create JSON success response.");
             callbackContext.error("Failed to create JSON success response.");
         }
     }
-    
-    
+
+
 
     private Uri getCollectionUri(String category) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -743,6 +818,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     return MediaStore.Images.Media.getContentUri(volumeName);
                 case "documents":
                     return MediaStore.Files.getContentUri(volumeName);
+                case "download":
+                    return MediaStore.Downloads.getContentUri(volumeName);
                 default:
                     return null;
             }
@@ -757,14 +834,14 @@ public class CordovaSaveBlob extends CordovaPlugin {
         File cacheDir = cordova.getContext().getCacheDir();
 
         if (cacheDir == null || !cacheDir.isDirectory()) {
-          //  Log.w(TAG, "Cache directory is not valid.");
+            //  Log.w(TAG, "Cache directory is not valid.");
             return;
         }
 
         if (setTime == 0) {
             deleteRecursively(cacheDir);
             cacheDir.mkdir();
-           // Log.d(TAG, "All cache cleared.");
+            // Log.d(TAG, "All cache cleared.");
             return;
         }
 
@@ -801,15 +878,15 @@ public class CordovaSaveBlob extends CordovaPlugin {
         }
 
         if (fileOrDirectory.delete()) {
-           // Log.d(TAG, "Deleted cache: " + fileOrDirectory.getPath());
+            // Log.d(TAG, "Deleted cache: " + fileOrDirectory.getPath());
         } else {
-          //  Log.w(TAG, "Failed to delete cache: " + fileOrDirectory.getPath());
+            //  Log.w(TAG, "Failed to delete cache: " + fileOrDirectory.getPath());
         }
     }
 
 
 
-    
+
 
 
     private void registerWebRTC() {
@@ -877,7 +954,9 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 }
 
                 long fileLength = 0;
-                fileLength = conn.getContentLengthLong();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    fileLength = conn.getContentLengthLong();
+                }
                 Uri targetUri = prepareTargetUri(
                         cordova.getActivity().getContentResolver(),
                         saveToPath,
@@ -1074,7 +1153,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 }
 
             } catch (Exception e) {
-                e.printStackTrace();
+                //  e.printStackTrace();
                 callbackContext.error("Upload failed: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             } finally {
                 try { if (fileInputStream != null) fileInputStream.close(); } catch (IOException ignored) {}
@@ -1147,20 +1226,18 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
     private void openAppSettings() {
-        try {
-            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-            Uri uri = Uri.fromParts("package", cordova.getActivity().getPackageName(), null);
-            intent.setData(uri);
-            cordova.getActivity().startActivity(intent);
-        } catch (ActivityNotFoundException e) {
-            currentCallbackContext.error("Unable to open settings");
-        }
+        cordova.getThreadPool().execute(() -> {
+            try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                Uri uri = Uri.fromParts("package", cordova.getActivity().getPackageName(), null);
+                intent.setData(uri);
+                cordova.getActivity().startActivity(intent);
+            } catch (ActivityNotFoundException e) {
+                currentCallbackContext.error("Unable to open settings");
+            }
+        });
     }
-    
-    
-    
-    
-    
+
 
 
     private void fileToBase64(final String filePath, final CallbackContext callbackContext) {
@@ -1222,22 +1299,45 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     private void copyFileAndGetMetadata(String uriString, CallbackContext callbackContext) {
         Context context = this.cordova.getActivity().getApplicationContext();
-        Uri uri = Uri.parse(uriString);
         JSONObject result = new JSONObject();
 
-        try (Cursor cursor = context.getContentResolver().query(uri, null, null, null, null)) {
-            String originalFileName = null;
-            long size = 0;
+        String originalFileName = null;
+        long size = 0;
+        Uri sourceUri;
 
-            if (cursor != null && cursor.moveToFirst()) {
-                int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                if (nameIndex != -1) {
-                    originalFileName = cursor.getString(nameIndex);
+        try {
+            if (uriString.startsWith("/") || uriString.startsWith("file://")) {
+                File file;
+                if (uriString.startsWith("file://")) {
+                    sourceUri = Uri.parse(uriString);
+                    file = new File(sourceUri.getPath());
+                } else {
+                    file = new File(uriString);
+                    sourceUri = Uri.fromFile(file);
                 }
 
-                int sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
-                if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
-                    size = cursor.getLong(sizeIndex);
+                if (!file.exists() || !file.isFile()) {
+                    throw new java.io.FileNotFoundException("File not found or is a directory at path: " + uriString);
+                }
+
+                originalFileName = file.getName();
+                size = file.length();
+            } else {
+
+                sourceUri = Uri.parse(uriString);
+
+                try (Cursor cursor = context.getContentResolver().query(sourceUri, null, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if (nameIndex != -1) {
+                            originalFileName = cursor.getString(nameIndex);
+                        }
+
+                        int sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
+                        if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
+                            size = cursor.getLong(sizeIndex);
+                        }
+                    }
                 }
             }
 
@@ -1246,15 +1346,14 @@ public class CordovaSaveBlob extends CordovaPlugin {
             }
 
             File cacheDir = context.getCacheDir();
-
             String sanitizedFileName = originalFileName.replaceAll("[\\\\/:*?\"<>|]", "_");
             File outputFile = new File(cacheDir, sanitizedFileName);
 
-            try (InputStream inputStream = context.getContentResolver().openInputStream(uri);
+            try (InputStream inputStream = context.getContentResolver().openInputStream(sourceUri);
                  OutputStream outputStream = new FileOutputStream(outputFile)) {
 
                 if (inputStream == null) {
-                    throw new Exception("Unable to open the input stream of the URI.");
+                    throw new Exception("Unable to open the input stream of the URI: " + sourceUri.toString());
                 }
 
                 byte[] buffer = new byte[4096];
@@ -1264,32 +1363,32 @@ public class CordovaSaveBlob extends CordovaPlugin {
                 }
             }
 
-            result.put("uri", uri.toString());
+            result.put("uri", sourceUri.toString());
             result.put("name", originalFileName);
-            result.put("cachedPath", "file://" + outputFile.getAbsolutePath());
+            result.put("cachedPath", outputFile.getAbsolutePath());
             result.put("size", size);
             result.put("sizeReadable", getReadableSize(size));
 
-            String mimeType = context.getContentResolver().getType(uri);
+            String mimeType = context.getContentResolver().getType(sourceUri);
             if (mimeType != null) {
                 result.put("mimeType", mimeType);
 
                 if (mimeType.startsWith("image/")) {
-                    try (InputStream imageStream = context.getContentResolver().openInputStream(uri)) {
+                    try (InputStream imageStream = context.getContentResolver().openInputStream(sourceUri)) {
                         BitmapFactory.Options opts = new BitmapFactory.Options();
-                        opts.inJustDecodeBounds = true; //
+                        opts.inJustDecodeBounds = true;
                         BitmapFactory.decodeStream(imageStream, null, opts);
                         result.put("width", opts.outWidth);
                         result.put("height", opts.outHeight);
                     } catch (Exception e) {
-                       // Log.w(TAG, "Failed to read the image metadata.", e);
+                        // Log.w(TAG, "Failed to read the image metadata.", e);
                     }
                 }
 
                 if (mimeType.startsWith("video/") || mimeType.startsWith("audio/")) {
                     MediaMetadataRetriever mmr = new MediaMetadataRetriever();
                     try {
-                        mmr.setDataSource(context, uri);
+                        mmr.setDataSource(context, sourceUri);
                         String durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
                         long durationMs = durationStr != null ? Long.parseLong(durationStr) : 0;
                         result.put("duration", durationMs);
@@ -1299,7 +1398,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         int sec = totalSec % 60;
                         result.put("humanDuration", String.format(Locale.getDefault(), "%02d:%02d", min, sec));
                     } catch (Exception e) {
-                       // Log.w(TAG, "Failed to read media metadata.", e);
+                        // Log.w(TAG, "Failed to read media metadata.", e);
                     } finally {
                         mmr.release();
                     }
@@ -1309,10 +1408,10 @@ public class CordovaSaveBlob extends CordovaPlugin {
             callbackContext.success(result);
 
         } catch (Exception e) {
-           // Log.e(TAG, "Failed to copy files and get metadata", e);
             callbackContext.error("Failed to process the file: " + e.getMessage());
         }
     }
+
 
 
 
@@ -1439,7 +1538,238 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
 
 
+
+
+    // new action: plugin v0.0.4
+    private void createNewFile(String location, String fileName, String fileExtension, String content, CallbackContext callbackContext) {
+        String fullFileName = fileName + fileExtension;
+
+        if (location.startsWith("content://")) {
+            try {
+                Context context = this.cordova.getActivity().getApplicationContext();
+                Uri directoryUri = Uri.parse(location);
+
+                DocumentFile dir = DocumentFile.fromTreeUri(context, directoryUri);
+
+                if (dir == null || !dir.isDirectory()) {
+                    callbackContext.error("The given URI is not a valid directory.");
+                    return;
+                }
+
+                if (dir.findFile(fullFileName) != null) {
+                    callbackContext.error("File already exists: " + fullFileName);
+                    return;
+                }
+
+                String extensionOnly = fileExtension.substring(1);
+                String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extensionOnly);
+                if (mimeType == null) {
+                    mimeType = "application/octet-stream";
+                }
+
+                DocumentFile newFile = dir.createFile(mimeType, fullFileName);
+
+                if (newFile == null) {
+                    callbackContext.error("Failed to create a file in the SAF location.");
+                    return;
+                }
+
+                try (OutputStream os = context.getContentResolver().openOutputStream(newFile.getUri())) {
+                    if (os != null) {
+                        os.write(content.getBytes());
+                    } else {
+                        throw new IOException("Failed to open the output stream.");
+                    }
+                }
+
+                this.getFileMetaData(newFile.getUri().toString(), callbackContext);
+
+            } catch (Exception e) {
+                callbackContext.error("Failed to create SAF file: " + e.getMessage());
+            }
+
+        } else {
+            try {
+                File outputDir = new File(location);
+                if (!outputDir.exists() && !outputDir.mkdirs()) {
+                    callbackContext.error("Failed to create directory: " + location);
+                    return;
+                }
+
+                File newFile = new File(outputDir, fullFileName);
+
+                if (newFile.exists()) {
+                    callbackContext.error("File already exists: " + newFile.getAbsolutePath());
+                    return;
+                }
+
+                try (FileWriter writer = new FileWriter(newFile)) {
+                    writer.write(content);
+                }
+
+                this.getFileMetaData(newFile.getAbsolutePath(), callbackContext);
+
+            } catch (IOException e) {
+                callbackContext.error("Failed to create a traditional file: " + e.getMessage());
+            }
+        }
+    }
+
+
+
+
+
+    private void getFileMetaData(String fileUriString, CallbackContext callbackContext) {
+        if (fileUriString == null || fileUriString.isEmpty()) {
+            callbackContext.error("URI file cannot be empty.");
+            return;
+        }
+
+        String fileName = null;
+
+        try {
+            if (fileUriString.startsWith("content://")) {
+                Uri fileUri = Uri.parse(fileUriString);
+                Context context = this.cordova.getActivity().getApplicationContext();
+
+                try (Cursor cursor = context.getContentResolver().query(fileUri, null, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if (nameIndex != -1) {
+                            fileName = cursor.getString(nameIndex);
+                        }
+                    }
+                }
+                if (fileName == null) {
+                    DocumentFile docFile = DocumentFile.fromSingleUri(context, fileUri);
+                    if (docFile != null) {
+                        fileName = docFile.getName();
+                    }
+                }
+
+            } else {
+                File file = new File(fileUriString);
+                fileName = file.getName();
+            }
+
+            if (fileName == null) {
+                callbackContext.error("Could not find the filename for the URI: " + fileUriString);
+                return;
+            }
+
+            JSONObject metaData = new JSONObject();
+            metaData.put("fileUri", fileUriString);
+            metaData.put("fileName", fileName);
+
+            callbackContext.success(metaData);
+
+        } catch (Exception e) {
+            callbackContext.error("Failed to get file metadata: " + e.getMessage());
+        }
+    }
+
+
+
+
+
+    // new action: plugin v0.0.4
+    private void loadFileContent(String fileUriString, CallbackContext callbackContext) {
+        if (fileUriString == null || fileUriString.isEmpty()) {
+            callbackContext.error("URI file cannot be empty.");
+            return;
+        }
+
+        StringBuilder stringBuilder = new StringBuilder();
+
+        try {
+            if (fileUriString.startsWith("content://")) {
+                Uri contentUri = Uri.parse(fileUriString);
+                ContentResolver resolver = this.cordova.getActivity().getContentResolver();
+
+                try (InputStream is = resolver.openInputStream(contentUri);
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+
+                    if (is == null) {
+                        throw new IOException("Failed to open input stream for URI: " + fileUriString);
+                    }
+
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stringBuilder.append(line).append("\n");
+                    }
+                }
+            } else {
+                File file = new File(fileUriString);
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stringBuilder.append(line).append("\n");
+                    }
+                }
+            }
+
+            callbackContext.success(stringBuilder.toString());
+
+        } catch (IOException e) {
+            callbackContext.error("Failed to read file: " + e.getMessage());
+        }
+    }
+
+
+
+
+
+    // new action: plugin v0.0.4
+    private void saveFileContent(String fileUriString, String content, CallbackContext callbackContext) {
+        if (fileUriString == null || fileUriString.isEmpty()) {
+            callbackContext.error("URI file cannot be empty.");
+            return;
+        }
+
+        if (fileUriString.startsWith("content://")) {
+            try {
+                Uri contentUri = Uri.parse(fileUriString);
+                ContentResolver resolver = this.cordova.getActivity().getContentResolver();
+
+                try (OutputStream os = resolver.openOutputStream(contentUri, "wt")) {
+                    if (os == null) {
+                        throw new IOException("Failed to open the output stream for the URI: " + fileUriString);
+                    }
+                    os.write(content.getBytes());
+                    callbackContext.success(content);
+                }
+            } catch (IOException e) {
+                callbackContext.error("Failed to save file: " + e.getMessage());
+            }
+        } else {
+            try {
+                File file = new File(fileUriString);
+                File parentDir = file.getParentFile();
+                if (parentDir != null && !parentDir.exists()) {
+                    parentDir.mkdirs();
+                }
+
+                try (FileWriter writer = new FileWriter(file, false)) {
+                    writer.write(content);
+                    callbackContext.success(content);
+                }
+            } catch (IOException e) {
+                callbackContext.error("Failed to save file: " + e.getMessage());
+            }
+        }
+    }
+
+
+
+
+
+
+
+
+
+
     private void getFileMetadata(String filePath, CallbackContext callbackContext) {
+
         try {
             Uri fileUri;
 
@@ -1453,18 +1783,16 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     return;
                 }
                 fileUri = Uri.fromFile(file);
+
             }
 
             JSONObject metadata = getMetadata(fileUri);
 
             if (metadata != null) {
                 callbackContext.success(metadata);
-            } else {
-                callbackContext.error("Failed to retrieve metadata for URI: " + fileUri);
             }
 
         } catch (Exception e) {
-          //  Log.e(TAG, "Error getting file metadata", e);
             callbackContext.error("Error getting file metadata: " + e.getMessage());
         }
     }
@@ -1579,9 +1907,9 @@ public class CordovaSaveBlob extends CordovaPlugin {
         int digitGroups = (int) (Math.log10(size) / Math.log10(1024));
         return String.format(Locale.US, "%.2f %s", size / Math.pow(1024, digitGroups), units[digitGroups]);
     }
-    
-    
-    
+
+
+
 
     private String getTraditionalPath(Uri uri) {
         if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
@@ -1617,8 +1945,8 @@ public class CordovaSaveBlob extends CordovaPlugin {
         }
         return realPath;
     }
-    
-    
+
+
 
 
     private String createBase64String(Uri uri) throws IOException {
@@ -1670,6 +1998,59 @@ public class CordovaSaveBlob extends CordovaPlugin {
             cordova.startActivityForResult(this, intent, REQUEST_CODE_OPEN_DOCUMENT_TREE);
         });
     }
+
+
+
+
+
+
+    // new action: plugin v0.0.4
+    private void checkAndroidVersion(CallbackContext callbackContext) {
+        int currentSdkVer = Build.VERSION.SDK_INT;
+        String versionCategory;
+
+        // Android 14 (API 34) and higher
+        // Introducing partial photo/video access (Selected Photo Access).
+        // Permissions: READ_MEDIA_VISUAL_USER_SELECTED
+        // On Android 15 (API 35), the constant `VANILLA_ICE_CREAM` will be available.
+        if (currentSdkVer >= 34) { // Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            versionCategory = ">=14";
+        }
+
+        // Android 13 (API 33)
+        // Introducing granular media permissions: READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_AUDIO.
+        // WRITE_EXTERNAL_STORAGE has no effect anymore.
+        else if (currentSdkVer >= Build.VERSION_CODES.TIRAMISU) { // API 33
+            versionCategory = "13";
+        }
+
+        // Android 12 & 12L (API 31, 32)
+        // Introducing Scoped Storage. The MANAGE_EXTERNAL_STORAGE permission is introduced.
+        // FIX: This check must come BEFORE the check for Android 11 (R).
+        else if (currentSdkVer >= Build.VERSION_CODES.S) { // API 31
+            versionCategory = "12";
+        }
+
+        // Android 11 (API 30)
+        else if (currentSdkVer >= Build.VERSION_CODES.R) { // API 30
+            versionCategory = "11";
+        }
+
+        // Android 10 (API 29) and lower
+        // Uses legacy storage permission model.
+        // Permissions: READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE.
+        else {
+            versionCategory = "<=10";
+        }
+
+        if (versionCategory != null && !versionCategory.isEmpty()) {
+            callbackContext.success(versionCategory);
+        } else {
+            callbackContext.error("Failed to detect Android version.");
+        }
+    }
+
+
 
 
 
@@ -1729,8 +2110,10 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
 
+
+    // fix release v0.0.3
     private void checkAndRequestPermissions(JSONArray permissionsArr) throws JSONException {
-        
+
         boolean isManageStorageRequest = false;
         for (int i = 0; i < permissionsArr.length(); i++) {
             if ("MANAGE_EXTERNAL_STORAGE".equals(permissionsArr.getString(i))) {
@@ -1841,12 +2224,12 @@ public class CordovaSaveBlob extends CordovaPlugin {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-       
-            try {
-                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+
+        try {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
         if (requestCode == PERMISSION_REQUEST_CODE) {
             CallbackContext callbackContext = this.currentCallbackContext;
@@ -1943,7 +2326,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         result.put("width", opts.outWidth);
                         result.put("height", opts.outHeight);
                     } catch (Exception e) {
-                       // Log.w(TAG, "Failed to read image metadata.", e);
+                        // Log.w(TAG, "Failed to read image metadata.", e);
                     }
                 }
 
@@ -1960,7 +2343,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
                         int sec = totalSec % 60;
                         result.put("humanDuration", String.format(Locale.getDefault(), "%02d:%02d", min, sec));
                     } catch (Exception e) {
-                       // Log.w(TAG, "Failed to read media metadata.", e);
+                        // Log.w(TAG, "Failed to read media metadata.", e);
                     } finally {
                         mmr.release();
                     }
@@ -1987,7 +2370,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
         final CallbackContext callback = currentCallbackContext;
         currentCallbackContext = null;
         if (callback == null) {
-           // Log.w(TAG, "Callback context was lost or already used. Ignoring result.");
+            // Log.w(TAG, "Callback context was lost or already used. Ignoring result.");
             return;
         }
 
@@ -2007,7 +2390,7 @@ public class CordovaSaveBlob extends CordovaPlugin {
             final int takeFlags = data.getFlags()& (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             cordova.getActivity().getContentResolver().takePersistableUriPermission(uri, takeFlags);
         } catch (Exception e) {
-           // Log.w(TAG, "Failed to take persistable URI permission. This might be okay.", e);
+            // Log.w(TAG, "Failed to take persistable URI permission. This might be okay.", e);
         }
 
         cordova.getThreadPool().execute(() -> {
@@ -2021,12 +2404,42 @@ public class CordovaSaveBlob extends CordovaPlugin {
                     }
                 } else if (requestCode == REQUEST_CODE_OPEN_DOCUMENT_TREE) {
 
+                    final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+                    cordova.getActivity().getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                    saveFolderPath(String.valueOf(uri)); // SAF
+
+                    Uri customFolderUri = null;
+                    String displayPath = "";
+
+                    if (globalCustomNewFolderName != null && !globalCustomNewFolderName.isEmpty()) {
+                        DocumentFile parentDirectory = DocumentFile.fromTreeUri(cordova.getActivity(), uri);
+                        assert parentDirectory != null;
+                        String parentFolderName = parentDirectory.getName();
+                        DocumentFile existingFolder = parentDirectory.findFile(globalCustomNewFolderName);
+
+                        if (existingFolder != null && existingFolder.isDirectory()) {
+                            customFolderUri = existingFolder.getUri();
+                        } else {
+                            DocumentFile newFolder = parentDirectory.createDirectory(globalCustomNewFolderName);
+                            if (newFolder != null && newFolder.exists()) {
+                                customFolderUri = newFolder.getUri();
+                            } else {
+                                callback.error("Failed to create custom folder: " + globalCustomNewFolderName);
+                                return;
+                            }
+                        }
+                            displayPath = parentFolderName + "/" + globalCustomNewFolderName;
+                    }
+
                     JSONObject result = new JSONObject();
                     result.put("uri", uri.toString()); // SAF
+                    result.put("uriCustom", (customFolderUri != null) ? customFolderUri.toString() : ""); // SAF
+                    result.put("uriCustomPath", displayPath);
                     String dirTraditionalPath = getTraditionalTreePath(uri);
                     if (dirTraditionalPath != null) {
                         result.put("traditionalPath", dirTraditionalPath);
                     }
+                   // Log.d(TAG, "onActivityResult: " + result.toString());
                     callback.success(result);
 
                 } else if (requestCode == REQUEST_CODE_PICK_MEDIA) {
@@ -2048,6 +2461,70 @@ public class CordovaSaveBlob extends CordovaPlugin {
     }
 
 
+
+
+    private void checkPersistedPermission(CallbackContext callbackContext) {
+        cordova.getThreadPool().execute(() -> {
+            try {
+                String savedUri = getSavedFolderPath();
+                JSONObject result = new JSONObject();
+
+                if (hasPersistedPermission(savedUri)) {
+                    result.put("hasPermission", true);
+                    result.put("uri", savedUri);
+                    callbackContext.success(result);
+                } else {
+                    // No valid permission found. Launching folder picker.
+                    result.put("hasPermission", false);
+                    callbackContext.success(result);
+                }
+            } catch (Exception e) {
+                callbackContext.error("Error checking permission: " + e.getMessage());
+            }
+        });
+    }
+
+
+
+
+    // After the device is reloaded, is the permission still valid?
+    private boolean hasPersistedPermission(String uriString) {
+        if (uriString == null) {
+            return false;
+        }
+        Context context = cordova.getContext();
+        Uri targetUri = Uri.parse(uriString);
+
+        for (UriPermission permission : context.getContentResolver().getPersistedUriPermissions()) {
+            if (permission.isWritePermission() && permission.getUri().equals(targetUri)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    private void saveFolderPath(String uriString) {
+        Context context = cordova.getContext();
+        SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        editor.putString(KEY_TARGET_PATH_URI, uriString);
+        editor.apply();
+    }
+
+    private String getSavedFolderPath() {
+        Context context = cordova.getContext();
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getString(KEY_TARGET_PATH_URI, null);
+    }
+
+
+
+    @Override
+    public void onResume(boolean multitasking) {
+        super.onResume(multitasking);
+        // Execute native Java code when the app resumes
+        Log.d(TAG, "App resumed in Java!");
+    }
 
 
     @Override

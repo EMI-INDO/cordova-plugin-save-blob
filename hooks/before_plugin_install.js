@@ -9,8 +9,13 @@ module.exports = function (context) {
     let addReadVideo      = String(vars.IS_READ_M_VIDEO_PERMISSION).toLowerCase() === 'true';
     let addReadImages     = String(vars.IS_READ_M_IMAGES_PERMISSION).toLowerCase() === 'true';
     let addManageStorage  = String(vars.IS_MANAGE_STORAGE_PERMISSION).toLowerCase() === 'true';
-
-    if (!addCamera || !addReadVideo || !addReadImages || !addManageStorage) {
+    // plugin v0.0.4
+    let addReadAudio      = String(vars.IS_READ_M_AUDIO_PERMISSION).toLowerCase() === 'true';
+    let addRecordAudio    = String(vars.IS_RECORD_AUDIO_PERMISSION).toLowerCase() === 'true';
+    let addModifyAudio    = String(vars.IS_MODIFY_AUDIO_SET_PERMISSION).toLowerCase() === 'true';
+   
+    
+    if (!addCamera || !addReadVideo || !addReadImages || !addManageStorage || !addReadAudio || !addRecordAudio || !addModifyAudio) {
         try {
             const androidJsonPath = path.join(
                 context.opts.projectRoot,
@@ -34,12 +39,19 @@ module.exports = function (context) {
                 if (!addManageStorage) {
                     addManageStorage = String(me.IS_MANAGE_STORAGE_PERMISSION).toLowerCase() === 'true';
                 }
+                if (!addReadAudio) {
+                    addReadAudio = String(me.IS_READ_M_AUDIO_PERMISSION).toLowerCase() === 'true';
+                }
+                if (!addRecordAudio) {
+                    addRecordAudio = String(me.IS_RECORD_AUDIO_PERMISSION).toLowerCase() === 'true';
+                }
+                if (!addModifyAudio) {
+                    addModifyAudio = String(me.IS_MODIFY_AUDIO_SET_PERMISSION).toLowerCase() === 'true';
+                }
             }
         } catch (e) {
-            console.warn('[save-blob-plugin] Fallback read android.json failed:', e);
+           // console.warn('[save-blob-plugin] Fallback read android.json failed:', e);
         }
-    } else {
-       // console.log('[save-blob-plugin] Read flags from context.opts.variables');
     }
 
     const manifestPath = path.join(
@@ -49,14 +61,14 @@ module.exports = function (context) {
         'AndroidManifest.xml'
     );
     if (!fs.existsSync(manifestPath)) {
-        console.error('[save-blob-plugin] AndroidManifest.xml not found:', manifestPath);
+       // console.error('[save-blob-plugin] AndroidManifest.xml not found:', manifestPath);
         return;
     }
 
     let xml      = fs.readFileSync(manifestPath, 'utf8');
     let modified = false;
 
-    // Add the tools namespace if it doesn't already exist.
+    // Tambahkan namespace 'tools' jika belum ada
     if (!xml.includes('xmlns:tools="http://schemas.android.com/tools"')) {
         xml = xml.replace(
             /<manifest/,
@@ -65,19 +77,22 @@ module.exports = function (context) {
         modified = true;
         console.log('[save-blob-plugin] Added xmlns:tools');
     }
-
-    // plugin's built-in permissions, no form is required when uploading the app to the play store console.
+    
+    // Built-in plugin permissions, no form required when uploading apps to the Play Store console.
     const perms = [
-        { name: 'android.permission.READ_MEDIA_AUDIO' },
-        { name: 'android.permission.RECORD_AUDIO' },
-        { name: 'android.permission.MODIFY_AUDIO_SETTINGS' },
         { name: 'android.permission.READ_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32" tools:ignore="ScopedStorage"' },
         { name: 'android.permission.WRITE_EXTERNAL_STORAGE', attrs: 'android:maxSdkVersion="32" tools:ignore="ScopedStorage"' }
     ];
 
-    // permissions based on plugin variables, requires a form when uploading the app to the play store console.
+
+    // Permissions based on plugin variables, no form required when uploading apps to the Play Store console.
+    if (addReadAudio)     perms.push({ name: 'android.permission.READ_MEDIA_AUDIO' });
+    if (addRecordAudio)   perms.push({ name: 'android.permission.RECORD_AUDIO' });
+    if (addModifyAudio)   perms.push({ name: 'android.permission.MODIFY_AUDIO_SETTINGS' });
+    
+    // Permissions based on plugin variables, require a form when uploading the app to the Play Store console.
     if (addCamera)        perms.push({ name: 'android.permission.CAMERA' });
-    if (addReadVideo)     perms.push({ name: 'android.permission.READ_MEDIA_VIDEO', attrs: 'tools:ignore="SelectedPhotoAccess"' }); // <-- PERUBAHAN DI SINI
+    if (addReadVideo)     perms.push({ name: 'android.permission.READ_MEDIA_VIDEO', attrs: 'tools:ignore="SelectedPhotoAccess"' });
     if (addReadImages)    perms.push({ name: 'android.permission.READ_MEDIA_IMAGES', attrs: 'tools:ignore="SelectedPhotoAccess"' });
     if (addManageStorage) perms.push({ name: 'android.permission.MANAGE_EXTERNAL_STORAGE', attrs: 'tools:ignore="ScopedStorage"' });
 
@@ -96,13 +111,12 @@ module.exports = function (context) {
                 + xml.slice(idx);
             modified = true;
         } else {
-            console.error('[save-blob-plugin] <application> tag not found');
+          //  console.error('[save-blob-plugin] <application> tag not found');
         }
     } else {
-        console.log('[save-blob-plugin] No new permissions to add');
+       // console.log('[save-blob-plugin] No new permissions to add');
     }
 
-    //  Add requestLegacyExternalStorage if it doesn't exist
     const appTagMatch = xml.match(/<application[^>]*>/);
     if (appTagMatch && !appTagMatch[0].includes('requestLegacyExternalStorage')) {
         const newApp = appTagMatch[0].replace(
