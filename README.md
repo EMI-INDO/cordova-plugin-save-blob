@@ -31,14 +31,20 @@ The plugin exposes the following methods via `cordova.plugin.CordovaSaveBlob.<Me
 ## new api cordova-plugin-save-blob@0.0.4  (12 new methods)
 
 ---
-- To ensure that the filePath LegacyExternalStorage (traditionalPath) continues to function on modern devices, whether the file source is from an SD card or USB OTG, use the copyFileToCache method.
-- NOTE: The copyFileToCache method or any method with the isCopyFileToCache parameter set to true will use shared storage on the user's device. To clear the cache, use the clearAppOldCache method after the manipulation process is complete.
-- The response.cachedPath URI can be used without any permission restrictions, e.g., uploading to Google Drive or your own hosting.
+
+To ensure the `filePath` from LegacyExternalStorage (`traditionalPath`) continues to work on modern devices, whether the file source is from an SD card or a USB OTG, use the `copyFileToCache` method.
+
+### Note
+
+The `copyFileToCache` method, or any other method with the `isCopyFileToCache` parameter set to `true`, will consume storage space on the user's device. To clear the cache, use the `clearAppOldCache` method after the file manipulation process is complete.
+
+The `response.cachedPath` URI can be used without any permission restrictions, for example, to upload to Google Drive or your own hosting service.
+
 
 ---
 - v0.0.4 No description yet; I will create it when I have free time.
 - This plugin works fully from Android 10 to Android 16, 
-- 14 tests per release, until stable release.
+- 8 tests per release, until stable release.
 
 <details>
 <summary>View code example v0.0.4</summary>
